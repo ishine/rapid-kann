@@ -63,12 +63,16 @@ kann_t *kann_new(kad_node_t *cost, int n_rest, ...)
 	kad_node_t **roots;
 	va_list ap;
 
-	if (cost->n_d != 0) return 0;
+	// if (cost->n_d != 0) {
+	// 	printf("end here?! \n");
+	// 	return 0;
+	// }
 
 	va_start(ap, n_rest);
 	roots = (kad_node_t**)malloc((n_roots + 1) * sizeof(kad_node_t*));
-	for (i = 0; i < n_rest; ++i)
+	for (i = 0; i < n_rest; ++i) 
 		roots[i] = va_arg(ap, kad_node_t*);
+	
 	roots[i++] = cost;
 	va_end(ap);
 
@@ -81,6 +85,7 @@ kann_t *kann_new(kad_node_t *cost, int n_rest, ...)
 		if (kad_is_pivot(a->v[i])) has_pivot = 1;
 	}
 	if (has_recur && !has_pivot) { /* an RNN that doesn't have a pivot; then add a pivot on top of cost and recompile */
+		// printf("Are we here?");
 		cost->ext_flag &= ~KANN_F_COST;
 		roots[n_roots-1] = cost = kad_avg(1, &cost), cost->ext_flag |= KANN_F_COST;
 		free(a->v);
@@ -153,9 +158,18 @@ static void kann_switch_core(kann_t *a, int is_train)
 int kann_find(const kann_t *a, uint32_t ext_flag, int32_t ext_label)
 {
 	int i, k, r = -1;
-	for (i = k = 0; i < a->n; ++i)
+	printf("heiyaya!!! \n");
+	for (i = k = 0; i < a->n; ++i) {
+		printf("i: %d \n", i);
 		if (chk_flg(a->v[i]->ext_flag, ext_flag) && chk_lbl(a->v[i]->ext_label, ext_label))
 			++k, r = i;
+	}
+
+	// for (i = k = 0; i < a->n; ++i)
+	// 	if (chk_flg(a->v[i]->ext_flag, ext_flag) && chk_lbl(a->v[i]->ext_label, ext_label))
+	// 		++k, r = i;
+	printf("k: %d \n", k);
+	printf("r: %d \n", r);
 	return k == 1? r : k == 0? -1 : -2;
 }
 
@@ -541,12 +555,14 @@ kad_node_t *kann_new_leaf_array(int *offset, kad_node_p *par, uint8_t flag, floa
 	p->x = (float*)calloc(len, sizeof(float));
 	if (p->n_d <= 1) {
 		for (i = 0; i < len; ++i)
-			p->x[i] = x0_01;
+			p->x[i] = 0.01;
+			// p->x[i] = x0_01;
 	} else {
 		double sdev_inv;
 		sdev_inv = 1.0 / sqrt((double)len / p->d[0]);
 		for (i = 0; i < len; ++i)
-			p->x[i] = (float)(kad_drand_normal(0) * sdev_inv);
+			p->x[i] = 0.01;
+			// p->x[i] = (float)(kad_drand_normal(0) * sdev_inv);
 	}
 	if (off >= 0) par[off] = p, ++(*offset);
 	return p;
@@ -566,7 +582,12 @@ kad_node_t *kann_layer_dense2(int *offset, kad_node_p *par, kad_node_t *in, int 
 	kad_node_t *w, *b;
 	n0 = in->n_d >= 2? kad_len(in) / in->d[0] : kad_len(in);
 	w = kann_new_leaf2(offset, par, KAD_VAR, 0.0f, 2, n1, n0);
+	// Yu-De customized: Add new for node's flag
+	w->node_flag = DENSE_W;
 	b = kann_new_leaf2(offset, par, KAD_VAR, 0.0f, 1, n1);
+	// Yu-De customized: Add new for node's flag
+	b->node_flag = DENSE_B;
+
 	return kad_add(kad_cmul(in, w), b);
 }
 
@@ -969,6 +990,7 @@ const float *kann_apply1(kann_t *a, float *x)
 {
 	int i_out;
 	i_out = kann_find(a, KANN_F_OUT, 0);
+	printf("i_out :%d \n", i_out);
 	if (i_out < 0) return 0;
 	kann_set_batch_size(a, 1);
 	kann_feed_bind(a, KANN_F_IN, 0, &x);

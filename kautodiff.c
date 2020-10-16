@@ -19,11 +19,18 @@ typedef struct {
 
 static inline kad_node_t *kad_new_core(int n_d, int op, int n_child)
 {
+	printf("---kad_new_core start---\n");
+	printf("op: %d \n", op);
+	printf("n_child: %d \n", n_child);
 	kad_node_t *s;
-	if (n_d >= KAD_MAX_DIM) return 0;
+	if (n_d >= KAD_MAX_DIM) {
+		printf("---kad_new_core end earlier---\n");
+		return 0;
+	}
 	s = (kad_node_t*)calloc(1, sizeof(kad_node_t));
 	s->n_d = n_d, s->op = op, s->n_child = n_child;
 	if (s->n_child) s->child = (kad_node_t**)calloc(s->n_child, sizeof(kad_node_t*));
+	printf("---kad_new_core end---\n");
 	return s;
 }
 
@@ -33,7 +40,10 @@ static inline kad_node_t *kad_vleaf(uint8_t flag, float *x, float *g, int n_d, v
 	kad_node_t *p;
 	if (n_d > KAD_MAX_DIM) return 0;
 	p = (kad_node_t*)calloc(1, sizeof(kad_node_t));
+	printf("n_d: %d \n", n_d);
 	p->n_d = n_d;
+
+	// Set up the dimension of the node
 	for (i = 0; i < n_d; ++i)
 		p->d[i] = va_arg(ap, int32_t);
 	p->x = x, p->g = g, p->flag = flag;
@@ -50,6 +60,7 @@ kad_node_t *kad_const(float *x, int n_d, ...)
 
 kad_node_t *kad_feed(int n_d, ...)
 {
+	printf("in kad_feed \n");
 	kad_node_t *p;
 	va_list ap;
 	va_start(ap, n_d); p = kad_vleaf(0, 0, 0, n_d, ap); va_end(ap);
@@ -76,6 +87,7 @@ static inline kad_node_t *kad_finalize_node(kad_node_t *s) /* a helper function 
 		if (kad_is_back(s->child[i]))
 			break;
 	if (i < s->n_child) s->flag |= KAD_VAR;
+	printf("in kad_finalize_node s->n_d: %d \n", s->n_d);
 	return s;
 }
 
@@ -1108,7 +1120,7 @@ int kad_op_cmul(kad_node_t *p, int action)
 {
 	int i, n_a_row, n_b_row, n_col, n_a_col = 1, n_b_col = 1;
 	kad_node_t *q[2];
-
+	printf("CMUL OP \n");
 	q[0] = p->child[0], q[1] = p->child[1];
 	n_col = q[0]->d[q[0]->n_d - 1] > q[1]->d[q[1]->n_d - 1]? q[0]->d[q[0]->n_d - 1] : q[1]->d[q[1]->n_d - 1];
 	for (i = q[0]->n_d - 1; i >= 0; --i) if (n_a_col < n_col) n_a_col *= q[0]->d[i];

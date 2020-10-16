@@ -51,6 +51,10 @@
 #define KAD_POOL       0x4
 #define KAD_SHARE_RNG  0x10 /* with this flag on, different time step shares the same RNG status after unroll */
 
+/* Customize Flag */
+#define DENSE_W 1
+#define DENSE_B 2
+
 #define kad_is_back(p)  ((p)->flag & KAD_VAR)
 #define kad_is_ext(p)   ((p)->n_child == 0)
 #define kad_is_var(p)   (kad_is_ext(p) && kad_is_back(p))
@@ -66,7 +70,7 @@
 /* a node in the computational graph */
 typedef struct kad_node_t {
 	uint8_t     n_d;            /* number of dimensions; no larger than KAD_MAX_DIM */
-	uint8_t     flag;           /* type of the node; see KAD_F_* for valid flags */
+	uint8_t     flag;           /* type of the node; see KAD_F_* (this might be a typo) for valid flags */
 	uint16_t    op;             /* operator; kad_op_list[op] is the actual function */
 	int32_t     n_child;        /* number of operands/child nodes */
 	int32_t     tmp;            /* temporary field; MUST BE zero before calling kad_compile() */
@@ -74,6 +78,9 @@ typedef struct kad_node_t {
 	int32_t     d[KAD_MAX_DIM]; /* dimensions */
 	int32_t     ext_label;      /* labels for external uses (not modified by the kad_* APIs) */
 	uint32_t    ext_flag;       /* flags for external uses (not modified by the kad_* APIs) */
+  // Brand new! Yu-De customized
+  uint8_t     node_flag;      /* Type of the node ex: DENSE_W (weight of a dense net)*/
+
 	float      *x;              /* value; allocated for internal nodes */
 	float      *g;              /* gradient; allocated for internal nodes */
 	void       *ptr;            /* for special operators that need additional parameters (e.g. conv2d) */
