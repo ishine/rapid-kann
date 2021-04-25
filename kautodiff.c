@@ -987,10 +987,10 @@ static inline float kad_sdot(int n, const float *x, const float *y) /* BLAS sdot
 }
 static inline void kad_saxpy_inlined(int n, float a, const float *x, float *y) /* BLAS saxpy using SSE */
 {
-	int i, n8 = n >> 3 << 3;
+	int i, n8 = n >> 3 << 3; /* clear bottom 3 bits - multiple of 8 */
 	__m128 va;
 	va = _mm_set1_ps(a);
-	for (i = 0; i < n8; i += 8)
+	for (i = 0; i < n8; i += 8) /* SSE SAXPY */
 	{
 		__m128 vx1, vx2, vy1, vy2, vt1, vt2;
 		vx1 = _mm_loadu_ps(&x[i]);
@@ -1002,11 +1002,11 @@ static inline void kad_saxpy_inlined(int n, float a, const float *x, float *y) /
 		_mm_storeu_ps(&y[i], vt1);
 		_mm_storeu_ps(&y[i + 4], vt2);
 	}
-	for (; i < n; ++i)
+	for (; i < n; ++i) /* deal with remainder */
 		y[i] += a * x[i];
 }
 #else
-static inline float kad_sdot(int n, const float *x, const float *y) /* BLAS sdot */
+static inline float kad_sdot(int n, const float *x, const float *y) /* Fortran - BLAS sdot - otherwise use intrinsics */
 {
 	int i;
 	float s = 0.;
@@ -1023,7 +1023,7 @@ static inline void kad_saxpy_inlined(int n, float a, const float *x, float *y) /
 #endif
 
 void kad_vec_mul_sum(int n, float *a, const float *b, const float *c)
-{
+{ /* dot product */
 	int i;
 	for (i = 0; i < n; ++i)
 		a[i] += b[i] * c[i];
@@ -1032,43 +1032,43 @@ void kad_vec_mul_sum(int n, float *a, const float *b, const float *c)
 void kad_saxpy(int n, float a, const float *x, float *y) { kad_saxpy_inlined(n, a, x, y); }
 
 #ifdef HAVE_CBLAS
-#include <cblas.h>
+#include <cblas.h> /* FORTRAN optimization of MMM */
 void kad_sgemm_simple(int trans_A, int trans_B, int M, int N, int K, const float *A, const float *B, float *C)
 {
 	cblas_sgemm(CblasRowMajor, trans_A ? CblasTrans : CblasNoTrans, trans_B ? CblasTrans : CblasNoTrans, M, N, K, 1.0f, A, trans_A ? M : K, B, trans_B ? K : N, 1.0f, C, N);
 }
-#else
+#else /* CBLAS not available so always use this */
 void kad_sgemm_simple(int trans_A, int trans_B, int M, int N, int K, const float *A, const float *B, float *C) /* simplified BLAS sgemm */
 {
 	static const int x = 16;
 	int i, j, k;
-	if (!trans_A && trans_B)
+	if (!trans_A && trans_B) /* A-0 B-1 */
 	{
 		for (i = 0; i < M; i += x)
 			for (j = 0; j < N; j += x)
 			{
-				int ii, ie = M < i + x ? M : i + x;
+				int ii, ie = M < i + x ? M : i + x; /* set tile to min(block, remaining) */
 				int jj, je = N < j + x ? N : j + x;
 				for (ii = i; ii < ie; ++ii)
 				{ /* loop tiling */
 					const float *aii = A + ii * K, *bjj;
 					float *cii = C + ii * N;
 					for (jj = j, bjj = B + j * K; jj < je; ++jj, bjj += K)
-						cii[jj] += kad_sdot(K, aii, bjj);
+						cii[jj] += kad_sdot(K, aii, bjj); /* uses AVX/SSE */
 				}
 			}
 	}
-	else if (!trans_A && !trans_B)
+	else if (!trans_A && !trans_B)  /* A-0 B-0 */
 	{
 		for (i = 0; i < M; ++i)
 			for (k = 0; k < K; ++k)
-				kad_saxpy_inlined(N, A[i * K + k], &B[k * N], &C[i * N]);
+				kad_saxpy_inlined(N, A[i * K + k], &B[k * N], &C[i * N]); /* uses AVX/SSE */
 	}
-	else if (trans_A && !trans_B)
+	else if (trans_A && !trans_B)  /* A-1 B-0 */
 	{
 		for (k = 0; k < K; ++k)
 			for (i = 0; i < M; ++i)
-				kad_saxpy_inlined(N, A[k * M + i], &B[k * N], &C[i * N]);
+				kad_saxpy_inlined(N, A[k * M + i], &B[k * N], &C[i * N]); /* uses AVX/SSE */
 	}
 	else
 		abort(); /* not implemented for (trans_A && trans_B) */
@@ -1280,10 +1280,10 @@ int kad_op_mul(kad_node_t *p, int action)
 int kad_op_cmul(kad_node_t *p, int action)
 {
 	int i, n_a_row, n_b_row, n_col, n_a_col = 1, n_b_col = 1;
-	kad_node_t *q[2];
+	kad_node_t *q[2]; /* creates two computational nodes for the children of p */
 
 	q[0] = p->child[0], q[1] = p->child[1];
-	n_col = q[0]->d[q[0]->n_d - 1] > q[1]->d[q[1]->n_d - 1] ? q[0]->d[q[0]->n_d - 1] : q[1]->d[q[1]->n_d - 1];
+	n_col = q[0]->d[q[0]->n_d - 1] > q[1]->d[q[1]->n_d - 1] ? q[0]->d[q[0]->n_d - 1] : q[1]->d[q[1]->n_d - 1]; /* grabbing output dimensions based on children */
 	for (i = q[0]->n_d - 1; i >= 0; --i)
 		if (n_a_col < n_col)
 			n_a_col *= q[0]->d[i];
@@ -1291,7 +1291,7 @@ int kad_op_cmul(kad_node_t *p, int action)
 		if (n_b_col < n_col)
 			n_b_col *= q[1]->d[i];
 	n_a_row = kad_len(q[0]) / n_a_col, n_b_row = kad_len(q[1]) / n_b_col;
-	if (action == KAD_SYNC_DIM)
+	if (action == KAD_SYNC_DIM) /* if SYNC - validate that dimensions match */
 	{
 		if (n_a_col != n_b_col)
 			return -1;
@@ -1300,7 +1300,7 @@ int kad_op_cmul(kad_node_t *p, int action)
 	else if (action == KAD_FORWARD)
 	{
 		memset(p->x, 0, n_a_row * n_b_row * sizeof(float));
-		if (q[0]->x && q[1]->x)
+		if (q[0]->x && q[1]->x) /* reset output 'value' */
 			kad_sgemm_simple(0, 1, n_a_row, n_b_row, n_col, q[0]->x, q[1]->x, p->x); /* Y = X * trans(W) */
 	}
 	else if (action == KAD_BACKWARD)
@@ -2818,28 +2818,28 @@ int kad_op_avg1d(kad_node_t *p, int action)
 
 kad_op_f kad_op_list[KAD_MAX_OP] = {
 	0,
-	kad_op_add,			  /* 1:  element-wise addition */
+	kad_op_add,			  /* 1:  element-wise addition ----------------------------------------------- */
 	kad_op_mul,			  /* 2:  element-wise multiplication */
-	kad_op_cmul,		  /* 3:  column multiplication */
+	kad_op_cmul,		  /* 3:  column multiplication ----------------------------------------------- */
 	kad_op_ce_bin_neg,	  /* 4:  binary cross-entropy for (-1,1) */
 	kad_op_square,		  /* 5:  square */
-	kad_op_sigm,		  /* 6:  sigmoid */
+	kad_op_sigm,		  /* 6:  sigmoid ----------------------------------------------- */
 	kad_op_tanh,		  /* 7:  tanh */
-	kad_op_relu,		  /* 8:  ReLU */
+	kad_op_relu,		  /* 8:  ReLU ----------------------------------------------- */
 	kad_op_matmul,		  /* 9:  matrix multiplication */
 	kad_op_avg,			  /* 10: general average pooling (not for ConvNet) */
 	kad_op_1minus,		  /* 11: 1-x */
 	kad_op_select,		  /* 12: choose between one of the children */
 	kad_op_ce_multi,	  /* 13: multi-class cross-entropy */
 	kad_op_softmax,		  /* 14: softmax */
-	kad_op_dropout,		  /* 15: dropout */
-	kad_op_conv2d,		  /* 16: 2D convolution */
-	kad_op_max2d,		  /* 17: 2D max pooling (for 2D ConvNet) */
+	kad_op_dropout,		  /* 15: dropout ----------------------------------------------- */
+	kad_op_conv2d,		  /* 16: 2D convolution ----------------------------------------------- */
+	kad_op_max2d,		  /* 17: 2D max pooling (for 2D ConvNet) ----------------------------------------------- */
 	kad_op_conv1d,		  /* 18: 1D convolution */
 	kad_op_max1d,		  /* 19: 1D max pooling (for 1D ConvNet) */
 	kad_op_slice,		  /* 20: slice data at a dimension */
 	kad_op_max,			  /* 21: general max pooling */
-	kad_op_ce_bin,		  /* 22: binary cross-entropy for (0,1) */
+	kad_op_ce_bin,		  /* 22: binary cross-entropy for (0,1) ----------------------------------------------- */
 	kad_op_sub,			  /* 23: element-wise subtraction */
 	kad_op_sample_normal, /* 24: sample from a normal distribution */
 	kad_op_reduce_sum,	  /* 25 */

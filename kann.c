@@ -185,7 +185,7 @@ static float kann_cost_core(kann_t *a, int cost_label, int cal_grad)
 	i_cost = kann_find(a, KANN_F_COST, cost_label);
 	assert(i_cost >= 0);
 	cost = *kad_eval_at(a->n, a->v, i_cost);
-	if (cal_grad) kad_grad(a->n, a->v, i_cost);
+	if (cal_grad) kad_grad(a->n, a->v, i_cost); /* training - calculate gradient and store in layers of ann */
 	return cost;
 }
 
@@ -374,11 +374,11 @@ static void mt_kickoff(kann_t *a, int cost_label, int cal_grad, int eval_out)
 
 float kann_cost(kann_t *a, int cost_label, int cal_grad)
 {
-	mtaux_t *mt = (mtaux_t*)a->mt;
+	mtaux_t *mt = (mtaux_t*)a->mt; /* init multithreading data structure */
 	int i, j, B, k, n_var;
 	float cost;
 
-	if (mt == 0) return kann_cost_core(a, cost_label, cal_grad);
+	if (mt == 0) return kann_cost_core(a, cost_label, cal_grad); /* single threaded cost */
 	B = kad_sync_dim(a->n, a->v, -1); /* get the current batch size */
 	n_var = kann_size_var(a);
 
@@ -877,15 +877,15 @@ int kann_train_fnn1(kann_t *ann, float lr, int mini_size, int max_epoch, int max
 		int n_proc = 0, n_train_err = 0, n_val_err = 0, n_train_base = 0, n_val_base = 0;
 		double train_cost = 0.0, val_cost = 0.0;
 		kann_shuffle(n_train, shuf);
-		kann_switch(ann, 1);
+		kann_switch(ann, 1); /* set to training mode */
 		while (n_proc < n_train) {
 			int b, c, ms = n_train - n_proc < mini_size? n_train - n_proc : mini_size;
-			for (b = 0; b < ms; ++b) {
+			for (b = 0; b < ms; ++b) { /* for every element in minibatch - copying data */
 				memcpy(&x1[b*n_in],  x[shuf[n_proc+b]], n_in  * sizeof(float));
 				memcpy(&y1[b*n_out], y[shuf[n_proc+b]], n_out * sizeof(float));
 			}
-			kann_set_batch_size(ann, ms);
-			train_cost += kann_cost(ann, 0, 1) * ms;
+			kann_set_batch_size(ann, ms); /* sets batch size to minibatch size */
+			train_cost += kann_cost(ann, 0, 1) * ms; /* GETS COST */
 			c = kann_class_error(ann, &b);
 			n_train_err += c, n_train_base += b;
 			kann_RMSprop(n_var, lr, 0, 0.9f, ann->g, ann->x, r);

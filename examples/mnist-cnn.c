@@ -57,6 +57,13 @@ int main(int argc, char *argv[]) {
             frac_val = atof(optarg);
     }
 
+#ifdef __SSE__ /* available */
+    printf("SSE available - using vector extensions\n");
+#endif
+#ifdef HAVE_CBLAS /* not available */
+    printf("CBLAS available - using FORTRAN\n");
+#endif
+
     printf("Built MNIST-CNN with training parameters:\n------------------------------------\n");
     printf("Max epochs\t\t%d\n", max_epoch);
     printf("Threads\t\t\t%d\n", n_threads);
