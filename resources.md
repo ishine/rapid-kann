@@ -1,1 +1,3 @@
-Convolution with CUDA - https://www.evl.uic.edu/sjames/cs525/final.html
+- [Convolution with CUDA](https://www.evl.uic.edu/sjames/cs525/final.html)
+- [Cblas sgemm](https://www.ibm.com/docs/en/essl/6.2?topic=mos-sgemm-dgemm-cgemm-zgemm-combined-matrix-multiplication-addition-general-matrices-their-transposes-conjugate-transposes)
+- [CUDA sgemm](http://www.es.ele.tue.nl/~mwijtvliet/5KK73/?page=mmcuda)
