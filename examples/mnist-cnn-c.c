@@ -3,19 +3,8 @@
 #include <unistd.h>
 #include <time.h>
 
-#include "kann.cuh"
-#include "kann_extra/kann_data.cuh"
-
-/* Assertion to check for errors */
-#define CUDA_SAFE_CALL(ans) \
-    { gpuAssert((ans), (char *)__FILE__, __LINE__); }
-inline void gpuAssert(cudaError_t code, char *file, int line, bool abort = true) {
-    if (code != cudaSuccess) {
-        fprintf(stderr, "CUDA_SAFE_CALL: %s %s %d\n",
-                cudaGetErrorString(code), file, line);
-        if (abort) exit(code);
-    }
-}
+#include "kann.h"
+#include "kann_extra/kann_data.h"
 
 /* -------------- Timing methods ------------- */
 double ts_ms(struct timespec ts) {
@@ -36,7 +25,7 @@ struct timespec interval(struct timespec start, struct timespec stop) {
 
 
 int main(int argc, char *argv[]) {
-    /* Timing methods for CPU and GPU */
+    /* Timing */
     struct timespec timer_start, timer_stop;
     float runtime;
     clock_gettime(CLOCK_REALTIME, &timer_start);
@@ -68,20 +57,16 @@ int main(int argc, char *argv[]) {
             frac_val = atof(optarg);
     }
 
-#ifdef __SSE__ /* SCC available */
-    printf("AVX/SSE available\n");
+#ifdef __SSE__ /* available */
+    printf("SSE available - using vector extensions\n");
 #endif
-#ifdef HAVE_CBLAS /* SCC not available */
-    printf("CBLAS available\n");
-#endif
-#ifdef __CUDACC__ /* SCC available */
-    printf("CUDA available\n");
+#ifdef HAVE_CBLAS /* not available */
+    printf("CBLAS available - using FORTRAN\n");
 #endif
 
     printf("Built MNIST-CNN with training parameters:\n------------------------------------\n");
     printf("Max epochs\t\t%d\n", max_epoch);
     printf("Threads\t\t\t%d\n", n_threads);
-    printf("CUDA Blocksize\t\t%d\n", block_size);
     printf("------------------------------------\n");
 
     if (argc - optind == 0 || (argc - optind == 1 && fn_in == 0)) {

@@ -1,5 +1,5 @@
 CC=			nvcc
-CFLAGS=		-g -O2 -arch compute_60 -code sm_60
+CFLAGS=		-O3 -arch compute_60 -code sm_60
 CFLAGS_LIB=	#-ansi -pedantic -Wno-long-long # ANSI C does not have inline which affects performance a little bit
 CPPFLAGS=	-DHAVE_PTHREAD
 INCLUDES=	-I.

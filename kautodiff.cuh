@@ -33,6 +33,9 @@
 #include <stdio.h>
 #include <stdint.h>
 
+/* parameters for CUDA */
+#define block_size 16
+
 #ifdef __STRICT_ANSI__
 #define inline
 #endif
