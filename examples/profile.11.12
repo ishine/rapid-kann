@@ -1,0 +1,390 @@
+Flat profile:
+
+Each sample counts as 0.01 seconds.
+  %   cumulative   self              self     total           
+ time   seconds   seconds    calls  ms/call  ms/call  name    
+ 83.03     23.28    23.28     9482     2.46     2.46  kad_op_conv2d(kad_node_t*, int)
+  6.88     25.21     1.93     9388     0.21     0.21  kad_sgemm_simple(int, int, int, int, int, float const*, float const*, float*)
+  2.60     25.94     0.73     2504     0.29     0.29  kad_saxpy
+  1.89     26.47     0.53      626     0.85    12.80  kann_cost.constprop.14
+  1.85     26.99     0.52     4745     0.11     0.11  kad_op_max2d(kad_node_t*, int)
+  1.78     27.49     0.50    14143     0.04     0.04  kad_op_relu(kad_node_t*, int)
+  1.03     27.78     0.29     8934     0.03     0.03  kad_op_dropout(kad_node_t*, int)
+  0.75     27.99     0.21                             kann_train_fnn1
+  0.07     28.01     0.02                             kann_data_read
+  0.04     28.02     0.01     9480     0.00     0.00  kad_op_select(kad_node_t*, int)
+  0.04     28.03     0.01                             mt_worker(void*)
+  0.04     28.04     0.01                             cudart::driverHelper::memcpyDispatch(void*, void const*, unsigned long, cudaMemcpyKind, bool)
+  0.00     28.04     0.00   600608     0.00     0.00  kad_drand_normal
+  0.00     28.04     0.00    19000     0.00     0.00  kad_drand
+  0.00     28.04     0.00     9467     0.00     0.00  kad_op_add(kad_node_t*, int)
+  0.00     28.04     0.00     9422     0.00     0.20  kad_op_cmul(kad_node_t*, int)
+  0.00     28.04     0.00     4719     0.00     0.00  kad_op_sigm(kad_node_t*, int)
+  0.00     28.04     0.00     4712     0.00     0.00  kad_op_ce_bin(kad_node_t*, int)
+  0.00     28.04     0.00     4473     0.00     0.00  kad_sgemm_simple_cuda(int, int, int, int, int, float const*, float const*, float*)
+  0.00     28.04     0.00     4387     0.00     0.04  kad_sync_dim
+  0.00     28.04     0.00     2504     0.00     0.00  __cudaUnregisterBinaryUtil()
+  0.00     28.04     0.00     2502     0.00     5.49  kad_eval_at
+  0.00     28.04     0.00     2191     0.00     5.76  kad_grad
+  0.00     28.04     0.00     1259     0.00     0.00  kad_size_var
+  0.00     28.04     0.00      626     0.00     0.20  mt_kickoff(kann_t*, int, int, int)
+  0.00     28.04     0.00       11     0.00     5.60  kad_allocate_internal(int, kad_node_t**)
+  0.00     28.04     0.00        7     0.00     0.00  kad_size_const
+  0.00     28.04     0.00        5     0.00     0.00  kad_ext_collate(int, kad_node_t**, float**, float**, float**)
+  0.00     28.04     0.00        5     0.00     0.00  kad_delete
+  0.00     28.04     0.00        4     0.00     0.04  kad_clone
+  0.00     28.04     0.00        4     0.00     0.00  kann_new_leaf2.constprop.10
+  0.00     28.04     0.00        2     0.00     0.20  kad_cmul
+  0.00     28.04     0.00        2     0.00     0.03  kad_dropout
+  0.00     28.04     0.00        2     0.00     0.00  kad_switch
+  0.00     28.04     0.00        2     0.00     0.00  kann_new_leaf.constprop.8
+  0.00     28.04     0.00        2     0.00     0.00  kann_new_leaf2.constprop.11
+  0.00     28.04     0.00        1     0.00     0.00  mt_destroy(mtaux_t*)
+  0.00     28.04     0.00        1     0.00     0.00  __sti____cudaRegisterAll()
+  0.00     28.04     0.00        1     0.00     0.00  __sti____cudaRegisterAll()
+  0.00     28.04     0.00        1     0.00     0.00  __sti____cudaRegisterAll()
+  0.00     28.04     0.00        1     0.00     0.00  __sti____cudaRegisterAll()
+  0.00     28.04     0.00        1     0.00     0.00  kad_add
+  0.00     28.04     0.00        1     0.00     0.00  kad_ce_bin
+  0.00     28.04     0.00        1     0.00     5.60  kad_compile_array
+  0.00     28.04     0.00        1     0.00     0.00  kad_feed
+  0.00     28.04     0.00        1     0.00     0.00  kad_save
+  0.00     28.04     0.00        1     0.00     0.00  kad_sigm
+
+			Call graph
+
+
+granularity: each sample hit covers 2 byte(s) for 0.04% of 28.04 seconds
+
+index % time    self  children    called     name
+                0.00    0.00       2/9482        kad_conv2d [21]
+                0.05    0.00      22/9482        kad_allocate_internal(int, kad_node_t**) [15]
+                0.10    0.00      42/9482        kad_sync_dim [13]
+               11.06    0.00    4504/9482        kad_grad [4]
+               12.06    0.00    4912/9482        kad_eval_at [3]
+[1]     83.0   23.28    0.00    9482         kad_op_conv2d(kad_node_t*, int) [1]
+-----------------------------------------------
+                                                 <spontaneous>
+[2]     70.4    0.01   19.74                 mt_worker(void*) [2]
+                0.00   10.30    1876/2502        kad_eval_at [3]
+                0.00    9.44    1641/2191        kad_grad [4]
+-----------------------------------------------
+                0.00    3.44     626/2502        kann_cost.constprop.14 [6]
+                0.00   10.30    1876/2502        mt_worker(void*) [2]
+[3]     49.0    0.00   13.74    2502         kad_eval_at [3]
+               12.06    0.00    4912/9482        kad_op_conv2d(kad_node_t*, int) [1]
+                0.00    1.00    4887/9422        kad_op_cmul(kad_node_t*, int) [7]
+                0.27    0.00    2462/4745        kad_op_max2d(kad_node_t*, int) [10]
+                0.26    0.00    7299/14143       kad_op_relu(kad_node_t*, int) [11]
+                0.14    0.00    4375/8934        kad_op_dropout(kad_node_t*, int) [12]
+                0.01    0.00    4917/9480        kad_op_select(kad_node_t*, int) [17]
+                0.00    0.00    4928/9467        kad_op_add(kad_node_t*, int) [418]
+                0.00    0.00    2447/4719        kad_op_sigm(kad_node_t*, int) [419]
+                0.00    0.00    2440/4712        kad_op_ce_bin(kad_node_t*, int) [420]
+-----------------------------------------------
+                0.00    3.17     550/2191        kann_cost.constprop.14 [6]
+                0.00    9.44    1641/2191        mt_worker(void*) [2]
+[4]     45.0    0.00   12.61    2191         kad_grad [4]
+               11.06    0.00    4504/9482        kad_op_conv2d(kad_node_t*, int) [1]
+                0.00    0.92    4469/9422        kad_op_cmul(kad_node_t*, int) [7]
+                0.25    0.00    2250/4745        kad_op_max2d(kad_node_t*, int) [10]
+                0.24    0.00    6745/14143       kad_op_relu(kad_node_t*, int) [11]
+                0.15    0.00    4493/8934        kad_op_dropout(kad_node_t*, int) [12]
+                0.00    0.00    4497/9480        kad_op_select(kad_node_t*, int) [17]
+                0.00    0.00    4473/9467        kad_op_add(kad_node_t*, int) [418]
+                0.00    0.00    2239/4719        kad_op_sigm(kad_node_t*, int) [419]
+                0.00    0.00    2239/4712        kad_op_ce_bin(kad_node_t*, int) [420]
+-----------------------------------------------
+                                                 <spontaneous>
+[5]     29.4    0.21    8.04                 kann_train_fnn1 [5]
+                0.53    7.48     626/626         kann_cost.constprop.14 [6]
+                0.00    0.02     626/4387        kad_sync_dim [13]
+                0.00    0.00   19000/19000       kad_drand [34]
+                0.00    0.00    2504/2504        __cudaUnregisterBinaryUtil() [422]
+                0.00    0.00       1/1259        kad_size_var [35]
+                0.00    0.00       1/7           kad_size_const [36]
+-----------------------------------------------
+                0.53    7.48     626/626         kann_train_fnn1 [5]
+[6]     28.6    0.53    7.48     626         kann_cost.constprop.14 [6]
+                0.00    3.44     626/2502        kad_eval_at [3]
+                0.00    3.17     550/2191        kad_grad [4]
+                0.73    0.00    2504/2504        kad_saxpy [9]
+                0.00    0.12     626/626         mt_kickoff(kann_t*, int, int, int) [14]
+                0.00    0.02     626/4387        kad_sync_dim [13]
+                0.00    0.00     626/1259        kad_size_var [35]
+-----------------------------------------------
+                0.00    0.00       2/9422        kad_cmul [22]
+                0.00    0.00      22/9422        kad_allocate_internal(int, kad_node_t**) [15]
+                0.00    0.01      42/9422        kad_sync_dim [13]
+                0.00    0.92    4469/9422        kad_grad [4]
+                0.00    1.00    4887/9422        kad_eval_at [3]
+[7]      6.9    0.00    1.93    9422         kad_op_cmul(kad_node_t*, int) [7]
+                1.93    0.00    9388/9388        kad_sgemm_simple(int, int, int, int, int, float const*, float const*, float*) [8]
+                0.00    0.00    4473/4473        kad_sgemm_simple_cuda(int, int, int, int, int, float const*, float const*, float*) [421]
+-----------------------------------------------
+                1.93    0.00    9388/9388        kad_op_cmul(kad_node_t*, int) [7]
+[8]      6.9    1.93    0.00    9388         kad_sgemm_simple(int, int, int, int, int, float const*, float const*, float*) [8]
+-----------------------------------------------
+                0.73    0.00    2504/2504        kann_cost.constprop.14 [6]
+[9]      2.6    0.73    0.00    2504         kad_saxpy [9]
+-----------------------------------------------
+                0.00    0.00       1/4745        kad_max2d [27]
+                0.00    0.00      11/4745        kad_allocate_internal(int, kad_node_t**) [15]
+                0.00    0.00      21/4745        kad_sync_dim [13]
+                0.25    0.00    2250/4745        kad_grad [4]
+                0.27    0.00    2462/4745        kad_eval_at [3]
+[10]     1.9    0.52    0.00    4745         kad_op_max2d(kad_node_t*, int) [10]
+-----------------------------------------------
+                0.00    0.00       3/14143       kad_relu [28]
+                0.00    0.00      33/14143       kad_allocate_internal(int, kad_node_t**) [15]
+                0.00    0.00      63/14143       kad_sync_dim [13]
+                0.24    0.00    6745/14143       kad_grad [4]
+                0.26    0.00    7299/14143       kad_eval_at [3]
+[11]     1.8    0.50    0.00   14143         kad_op_relu(kad_node_t*, int) [11]
+-----------------------------------------------
+                0.00    0.00       2/8934        kad_dropout [30]
+                0.00    0.00      22/8934        kad_allocate_internal(int, kad_node_t**) [15]
+                0.00    0.00      42/8934        kad_sync_dim [13]
+                0.14    0.00    4375/8934        kad_eval_at [3]
+                0.15    0.00    4493/8934        kad_grad [4]
+[12]     1.0    0.29    0.00    8934         kad_op_dropout(kad_node_t*, int) [12]
+-----------------------------------------------
+                0.00    0.00       1/4387        kann_save [31]
+                0.00    0.00       4/4387        kad_clone [25]
+                0.00    0.02     626/4387        kann_cost.constprop.14 [6]
+                0.00    0.02     626/4387        kann_train_fnn1 [5]
+                0.00    0.12    3130/4387        mt_kickoff(kann_t*, int, int, int) [14]
+[13]     0.6    0.00    0.17    4387         kad_sync_dim [13]
+                0.10    0.00      42/9482        kad_op_conv2d(kad_node_t*, int) [1]
+                0.00    0.06      10/11          kad_allocate_internal(int, kad_node_t**) [15]
+                0.00    0.01      42/9422        kad_op_cmul(kad_node_t*, int) [7]
+                0.00    0.00      21/4745        kad_op_max2d(kad_node_t*, int) [10]
+                0.00    0.00      63/14143       kad_op_relu(kad_node_t*, int) [11]
+                0.00    0.00      42/8934        kad_op_dropout(kad_node_t*, int) [12]
+                0.00    0.00      42/9480        kad_op_select(kad_node_t*, int) [17]
+                0.00    0.00      42/9467        kad_op_add(kad_node_t*, int) [418]
+                0.00    0.00      21/4712        kad_op_ce_bin(kad_node_t*, int) [420]
+                0.00    0.00      21/4719        kad_op_sigm(kad_node_t*, int) [419]
+-----------------------------------------------
+                0.00    0.12     626/626         kann_cost.constprop.14 [6]
+[14]     0.4    0.00    0.12     626         mt_kickoff(kann_t*, int, int, int) [14]
+                0.00    0.12    3130/4387        kad_sync_dim [13]
+                0.00    0.00     626/1259        kad_size_var [35]
+-----------------------------------------------
+                0.00    0.01       1/11          kad_compile_array [19]
+                0.00    0.06      10/11          kad_sync_dim [13]
+[15]     0.2    0.00    0.06      11         kad_allocate_internal(int, kad_node_t**) [15]
+                0.05    0.00      22/9482        kad_op_conv2d(kad_node_t*, int) [1]
+                0.00    0.00      22/9422        kad_op_cmul(kad_node_t*, int) [7]
+                0.00    0.00      11/4745        kad_op_max2d(kad_node_t*, int) [10]
+                0.00    0.00      33/14143       kad_op_relu(kad_node_t*, int) [11]
+                0.00    0.00      22/8934        kad_op_dropout(kad_node_t*, int) [12]
+                0.00    0.00      22/9480        kad_op_select(kad_node_t*, int) [17]
+                0.00    0.00      22/9467        kad_op_add(kad_node_t*, int) [418]
+                0.00    0.00      11/4712        kad_op_ce_bin(kad_node_t*, int) [420]
+                0.00    0.00      11/4719        kad_op_sigm(kad_node_t*, int) [419]
+-----------------------------------------------
+                                                 <spontaneous>
+[16]     0.1    0.02    0.00                 kann_data_read [16]
+-----------------------------------------------
+                0.00    0.00       2/9480        kad_switch [32]
+                0.00    0.00      22/9480        kad_allocate_internal(int, kad_node_t**) [15]
+                0.00    0.00      42/9480        kad_sync_dim [13]
+                0.00    0.00    4497/9480        kad_grad [4]
+                0.01    0.00    4917/9480        kad_eval_at [3]
+[17]     0.0    0.01    0.00    9480         kad_op_select(kad_node_t*, int) [17]
+-----------------------------------------------
+                                                 <spontaneous>
+[18]     0.0    0.01    0.00                 cudart::driverHelper::memcpyDispatch(void*, void const*, unsigned long, cudaMemcpyKind, bool) [18]
+-----------------------------------------------
+                0.00    0.01       1/1           kann_new [20]
+[19]     0.0    0.00    0.01       1         kad_compile_array [19]
+                0.00    0.01       1/11          kad_allocate_internal(int, kad_node_t**) [15]
+-----------------------------------------------
+                                                 <spontaneous>
+[20]     0.0    0.00    0.01                 kann_new [20]
+                0.00    0.01       1/1           kad_compile_array [19]
+                0.00    0.00       1/5           kad_ext_collate(int, kad_node_t**, float**, float**, float**) [423]
+-----------------------------------------------
+                                                 <spontaneous>
+[21]     0.0    0.00    0.00                 kad_conv2d [21]
+                0.00    0.00       2/9482        kad_op_conv2d(kad_node_t*, int) [1]
+-----------------------------------------------
+                0.00    0.00       1/2           kann_layer_dense [24]
+                0.00    0.00       1/2           kann_layer_cost [23]
+[22]     0.0    0.00    0.00       2         kad_cmul [22]
+                0.00    0.00       2/9422        kad_op_cmul(kad_node_t*, int) [7]
+-----------------------------------------------
+                                                 <spontaneous>
+[23]     0.0    0.00    0.00                 kann_layer_cost [23]
+                0.00    0.00       1/2           kad_cmul [22]
+                0.00    0.00       2/4           kann_new_leaf2.constprop.10 [38]
+                0.00    0.00       1/1           kad_add [41]
+                0.00    0.00       1/1           kad_feed [43]
+                0.00    0.00       1/1           kad_sigm [45]
+                0.00    0.00       1/1           kad_ce_bin [42]
+-----------------------------------------------
+                                                 <spontaneous>
+[24]     0.0    0.00    0.00                 kann_layer_dense [24]
+                0.00    0.00       1/2           kad_cmul [22]
+                0.00    0.00       2/4           kann_new_leaf2.constprop.10 [38]
+-----------------------------------------------
+                0.00    0.00       4/4           kann_mt [26]
+[25]     0.0    0.00    0.00       4         kad_clone [25]
+                0.00    0.00       4/4387        kad_sync_dim [13]
+-----------------------------------------------
+                                                 <spontaneous>
+[26]     0.0    0.00    0.00                 kann_mt [26]
+                0.00    0.00       4/4           kad_clone [25]
+                0.00    0.00       4/5           kad_ext_collate(int, kad_node_t**, float**, float**, float**) [423]
+-----------------------------------------------
+                                                 <spontaneous>
+[27]     0.0    0.00    0.00                 kad_max2d [27]
+                0.00    0.00       1/4745        kad_op_max2d(kad_node_t*, int) [10]
+-----------------------------------------------
+                                                 <spontaneous>
+[28]     0.0    0.00    0.00                 kad_relu [28]
+                0.00    0.00       3/14143       kad_op_relu(kad_node_t*, int) [11]
+-----------------------------------------------
+                                                 <spontaneous>
+[29]     0.0    0.00    0.00                 kann_layer_dropout [29]
+                0.00    0.00       2/2           kad_dropout [30]
+                0.00    0.00       2/2           kad_switch [32]
+                0.00    0.00       2/2           kann_new_leaf2.constprop.11 [40]
+-----------------------------------------------
+                0.00    0.00       2/2           kann_layer_dropout [29]
+[30]     0.0    0.00    0.00       2         kad_dropout [30]
+                0.00    0.00       2/8934        kad_op_dropout(kad_node_t*, int) [12]
+-----------------------------------------------
+                                                 <spontaneous>
+[31]     0.0    0.00    0.00                 kann_save [31]
+                0.00    0.00       1/4387        kad_sync_dim [13]
+                0.00    0.00       1/1           kad_save [44]
+                0.00    0.00       1/1259        kad_size_var [35]
+                0.00    0.00       1/7           kad_size_const [36]
+-----------------------------------------------
+                0.00    0.00       2/2           kann_layer_dropout [29]
+[32]     0.0    0.00    0.00       2         kad_switch [32]
+                0.00    0.00       2/9480        kad_op_select(kad_node_t*, int) [17]
+-----------------------------------------------
+                0.00    0.00    9504/600608      kann_new_leaf.constprop.8 [39]
+                0.00    0.00  591104/600608      kann_new_leaf2.constprop.10 [38]
+[33]     0.0    0.00    0.00  600608         kad_drand_normal [33]
+-----------------------------------------------
+                0.00    0.00   19000/19000       kann_train_fnn1 [5]
+[34]     0.0    0.00    0.00   19000         kad_drand [34]
+-----------------------------------------------
+                0.00    0.00       1/1259        kann_save [31]
+                0.00    0.00       1/1259        kann_train_fnn1 [5]
+                0.00    0.00       5/1259        kad_ext_collate(int, kad_node_t**, float**, float**, float**) [423]
+                0.00    0.00     626/1259        mt_kickoff(kann_t*, int, int, int) [14]
+                0.00    0.00     626/1259        kann_cost.constprop.14 [6]
+[35]     0.0    0.00    0.00    1259         kad_size_var [35]
+-----------------------------------------------
+                0.00    0.00       1/7           kann_save [31]
+                0.00    0.00       1/7           kann_train_fnn1 [5]
+                0.00    0.00       5/7           kad_ext_collate(int, kad_node_t**, float**, float**, float**) [423]
+[36]     0.0    0.00    0.00       7         kad_size_const [36]
+-----------------------------------------------
+                0.00    0.00       1/5           kann_delete [379]
+                0.00    0.00       4/5           mt_destroy(mtaux_t*) [424]
+[37]     0.0    0.00    0.00       5         kad_delete [37]
+-----------------------------------------------
+                0.00    0.00       2/4           kann_layer_dense [24]
+                0.00    0.00       2/4           kann_layer_cost [23]
+[38]     0.0    0.00    0.00       4         kann_new_leaf2.constprop.10 [38]
+                0.00    0.00  591104/600608      kad_drand_normal [33]
+-----------------------------------------------
+                0.00    0.00       2/2           kann_layer_conv2d [388]
+[39]     0.0    0.00    0.00       2         kann_new_leaf.constprop.8 [39]
+                0.00    0.00    9504/600608      kad_drand_normal [33]
+-----------------------------------------------
+                0.00    0.00       2/2           kann_layer_dropout [29]
+[40]     0.0    0.00    0.00       2         kann_new_leaf2.constprop.11 [40]
+-----------------------------------------------
+                0.00    0.00       1/1           kann_layer_cost [23]
+[41]     0.0    0.00    0.00       1         kad_add [41]
+                0.00    0.00       2/9467        kad_op_add(kad_node_t*, int) [418]
+-----------------------------------------------
+                0.00    0.00       1/1           kann_layer_cost [23]
+[42]     0.0    0.00    0.00       1         kad_ce_bin [42]
+                0.00    0.00       1/4712        kad_op_ce_bin(kad_node_t*, int) [420]
+-----------------------------------------------
+                0.00    0.00       1/1           kann_layer_cost [23]
+[43]     0.0    0.00    0.00       1         kad_feed [43]
+-----------------------------------------------
+                0.00    0.00       1/1           kann_save [31]
+[44]     0.0    0.00    0.00       1         kad_save [44]
+-----------------------------------------------
+                0.00    0.00       1/1           kann_layer_cost [23]
+[45]     0.0    0.00    0.00       1         kad_sigm [45]
+                0.00    0.00       1/4719        kad_op_sigm(kad_node_t*, int) [419]
+-----------------------------------------------
+                0.00    0.00       2/9467        kad_add [41]
+                0.00    0.00      22/9467        kad_allocate_internal(int, kad_node_t**) [15]
+                0.00    0.00      42/9467        kad_sync_dim [13]
+                0.00    0.00    4473/9467        kad_grad [4]
+                0.00    0.00    4928/9467        kad_eval_at [3]
+[418]    0.0    0.00    0.00    9467         kad_op_add(kad_node_t*, int) [418]
+-----------------------------------------------
+                0.00    0.00       1/4719        kad_sigm [45]
+                0.00    0.00      11/4719        kad_allocate_internal(int, kad_node_t**) [15]
+                0.00    0.00      21/4719        kad_sync_dim [13]
+                0.00    0.00    2239/4719        kad_grad [4]
+                0.00    0.00    2447/4719        kad_eval_at [3]
+[419]    0.0    0.00    0.00    4719         kad_op_sigm(kad_node_t*, int) [419]
+-----------------------------------------------
+                0.00    0.00       1/4712        kad_ce_bin [42]
+                0.00    0.00      11/4712        kad_allocate_internal(int, kad_node_t**) [15]
+                0.00    0.00      21/4712        kad_sync_dim [13]
+                0.00    0.00    2239/4712        kad_grad [4]
+                0.00    0.00    2440/4712        kad_eval_at [3]
+[420]    0.0    0.00    0.00    4712         kad_op_ce_bin(kad_node_t*, int) [420]
+-----------------------------------------------
+                0.00    0.00    4473/4473        kad_op_cmul(kad_node_t*, int) [7]
+[421]    0.0    0.00    0.00    4473         kad_sgemm_simple_cuda(int, int, int, int, int, float const*, float const*, float*) [421]
+-----------------------------------------------
+                0.00    0.00    2504/2504        kann_train_fnn1 [5]
+[422]    0.0    0.00    0.00    2504         __cudaUnregisterBinaryUtil() [422]
+-----------------------------------------------
+                0.00    0.00       1/5           kann_new [20]
+                0.00    0.00       4/5           kann_mt [26]
+[423]    0.0    0.00    0.00       5         kad_ext_collate(int, kad_node_t**, float**, float**, float**) [423]
+                0.00    0.00       5/1259        kad_size_var [35]
+                0.00    0.00       5/7           kad_size_const [36]
+-----------------------------------------------
+                0.00    0.00       1/1           kann_delete [379]
+[424]    0.0    0.00    0.00       1         mt_destroy(mtaux_t*) [424]
+                0.00    0.00       4/5           kad_delete [37]
+-----------------------------------------------
+                0.00    0.00       1/1           __libc_csu_init [1522]
+[425]    0.0    0.00    0.00       1         __sti____cudaRegisterAll() [425]
+-----------------------------------------------
+                0.00    0.00       1/1           __libc_csu_init [1522]
+[426]    0.0    0.00    0.00       1         __sti____cudaRegisterAll() [426]
+-----------------------------------------------
+                0.00    0.00       1/1           __libc_csu_init [1522]
+[427]    0.0    0.00    0.00       1         __sti____cudaRegisterAll() [427]
+-----------------------------------------------
+                0.00    0.00       1/1           __libc_csu_init [1522]
+[428]    0.0    0.00    0.00       1         __sti____cudaRegisterAll() [428]
+-----------------------------------------------
+
+Index by function name
+
+ [418] kad_op_add(kad_node_t*, int) [426] __sti____cudaRegisterAll() [43] kad_feed
+   [7] kad_op_cmul(kad_node_t*, int) [427] __sti____cudaRegisterAll() [4] kad_grad
+  [11] kad_op_relu(kad_node_t*, int) [428] __sti____cudaRegisterAll() [44] kad_save
+ [419] kad_op_sigm(kad_node_t*, int) [422] __cudaUnregisterBinaryUtil() [9] kad_saxpy
+  [10] kad_op_max2d(kad_node_t*, int) [2] mt_worker(void*) [45] kad_sigm
+ [420] kad_op_ce_bin(kad_node_t*, int) [18] cudart::driverHelper::memcpyDispatch(void*, void const*, unsigned long, cudaMemcpyKind, bool) [36] kad_size_const
+   [1] kad_op_conv2d(kad_node_t*, int) [41] kad_add       [35] kad_size_var
+  [17] kad_op_select(kad_node_t*, int) [42] kad_ce_bin    [32] kad_switch
+  [12] kad_op_dropout(kad_node_t*, int) [25] kad_clone    [13] kad_sync_dim
+   [8] kad_sgemm_simple(int, int, int, int, int, float const*, float const*, float*) [22] kad_cmul [6] kann_cost.constprop.14
+ [421] kad_sgemm_simple_cuda(int, int, int, int, int, float const*, float const*, float*) [19] kad_compile_array [16] kann_data_read
+ [424] mt_destroy(mtaux_t*)   [37] kad_delete             [39] kann_new_leaf.constprop.8
+  [14] mt_kickoff(kann_t*, int, int, int) [34] kad_drand  [38] kann_new_leaf2.constprop.10
+ [423] kad_ext_collate(int, kad_node_t**, float**, float**, float**) [33] kad_drand_normal [40] kann_new_leaf2.constprop.11
+  [15] kad_allocate_internal(int, kad_node_t**) [30] kad_dropout [5] kann_train_fnn1
+ [425] __sti____cudaRegisterAll() [3] kad_eval_at

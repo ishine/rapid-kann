@@ -879,7 +879,7 @@ int kann_train_fnn1(kann_t *ann, float lr, int mini_size, int max_epoch, int max
 		kann_shuffle(n_train, shuf);
 		kann_switch(ann, 1); /* set to training mode */
 		while (n_proc < n_train) {
-			int b, c, ms = n_train - n_proc < mini_size? n_train - n_proc : mini_size;
+			int b, c, ms = n_train - n_proc < mini_size? n_train - n_proc : mini_size; /* only run min(rem, mini-batch size) */
 			for (b = 0; b < ms; ++b) { /* for every element in minibatch - copying data */
 				memcpy(&x1[b*n_in],  x[shuf[n_proc+b]], n_in  * sizeof(float));
 				memcpy(&y1[b*n_out], y[shuf[n_proc+b]], n_out * sizeof(float));

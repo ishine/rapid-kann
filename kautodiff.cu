@@ -1018,7 +1018,7 @@ void kad_sgemm_simple_cuda(int trans_A, int trans_B, int M, int N, int K, const 
     dim3 gridDim(1 + ((N - 1) / block_size), 1 + ((M - 1) / block_size), 1); /* these might need to swap */
 
     /* kernel call */
-    // cuda_sgemm_naive<<<gridDim, blockDim>>>(d_A, lda, d_B, ldb, d_C, ldc, alpha, beta, M, N, K);
+    cuda_sgemm_naive<<<gridDim, blockDim>>>(d_A, lda, d_B, ldb, d_C, ldc, alpha, beta, M, N, K);
     cuda_sgemm_coalesce<<<gridDim, blockDim>>>(d_A, lda, d_B, ldb, d_C, ldc, alpha, beta, M, N, K);
 
     /* copy back to host */
@@ -1273,7 +1273,8 @@ int kad_op_cmul(kad_node_t *p, int action) {
             kad_sgemm_simple(0, 1, n_a_row, n_b_row, n_col, q[0]->x, q[1]->x, p->x); /* Y = X * trans(W) */
     } else if (action == KAD_BACKWARD) {
         if (kad_is_back(q[0]) && q[1]->x)                                                 /* this is being hit - good */
-            kad_sgemm_simple_cuda(0, 0, n_a_row, n_col, n_b_row, p->g, q[1]->x, q[0]->g); /* G_x <- G_y * W */
+            // kad_sgemm_simple_cuda(0, 0, n_a_row, n_col, n_b_row, p->g, q[1]->x, q[0]->g); /* G_x <- G_y * W */
+            kad_sgemm_simple(0, 0, n_a_row, n_col, n_b_row, p->g, q[1]->x, q[0]->g); /* G_x <- G_y * W */
         if (kad_is_back(q[1]) && q[0]->x)
             kad_sgemm_simple(1, 0, n_b_row, n_col, n_a_row, p->g, q[0]->x, q[1]->g); /* G_w <- trans(G_y) * X */
     }

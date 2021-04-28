@@ -18,11 +18,11 @@ inline void gpuAssert(cudaError_t code, char *file, int line, bool abort = true)
 }
 
 /* -------------- Timing methods ------------- */
-double ts_ms(struct timespec ts) {
-    return ((((double)(ts.tv_sec)) * 1.0e9) + ((double)(ts.tv_nsec))) / (1.0e6);
-}
+// double ts_ms(struct timespec ts) {
+//     return ((((double)(ts.tv_sec)) * 1.0e9) + ((double)(ts.tv_nsec))) / (1.0e6);
+// }
 
-struct timespec interval(struct timespec start, struct timespec stop) {
+struct timespec diff(struct timespec start, struct timespec stop) {
     struct timespec temp;
     if ((stop.tv_nsec - start.tv_nsec) < 0) {
         temp.tv_sec = stop.tv_sec - start.tv_sec - 1;
@@ -34,12 +34,10 @@ struct timespec interval(struct timespec start, struct timespec stop) {
     return temp;
 }
 
-
 int main(int argc, char *argv[]) {
     /* Timing methods for CPU and GPU */
-    struct timespec timer_start, timer_stop;
-    float runtime;
-    clock_gettime(CLOCK_REALTIME, &timer_start);
+    struct timespec time_start, time_stop;
+    long long time_sec, time_ns;
 
     kann_t *ann;
     kann_data_t *x, *y;
@@ -47,7 +45,7 @@ int main(int argc, char *argv[]) {
     int c, mini_size = 64, max_epoch = 20, max_drop_streak = 10, seed = 131, n_h_fc = 128, n_h_flt = 32, n_threads = 1;
     float lr = 0.001f, dropout = 0.2f, frac_val = 0.1f;
 
-    while ((c = getopt(argc, argv, "i:o:m:h:f:d:s:t:v:")) >= 0) {
+    while ((c = getopt(argc, argv, "i:o:m:h:f:d:s:t:v:b:")) >= 0) {
         if (c == 'i')
             fn_in = optarg;
         else if (c == 'o')
@@ -66,6 +64,8 @@ int main(int argc, char *argv[]) {
             n_threads = atoi(optarg);
         else if (c == 'v')
             frac_val = atof(optarg);
+        else if (c == 'b')
+            mini_size = atoi(optarg);
     }
 
 #ifdef __SSE__ /* SCC available */
@@ -83,6 +83,8 @@ int main(int argc, char *argv[]) {
     printf("Threads\t\t\t%d\n", n_threads);
     printf("CUDA Blocksize\t\t%d\n", block_size);
     printf("------------------------------------\n");
+
+    clock_gettime(CLOCK_PROCESS_CPUTIME_ID, &time_start);
 
     if (argc - optind == 0 || (argc - optind == 1 && fn_in == 0)) {
         FILE *fp = stdout;
@@ -139,9 +141,9 @@ int main(int argc, char *argv[]) {
     kann_data_free(x);
     kann_delete(ann);
 
-    clock_gettime(CLOCK_REALTIME, &timer_stop);
-    runtime = ts_ms(interval(timer_start, timer_stop));
-    printf("\nRuntime: %f (msec)\n", runtime);
-
+    clock_gettime(CLOCK_PROCESS_CPUTIME_ID, &time_stop);
+    time_sec = (long long int)diff(time_start, time_stop).tv_sec;
+    time_ns = (long long int)diff(time_start, time_stop).tv_nsec;
+    printf("MNIST-CNN took %ld sec and %ld nsec (%ld.%09ld sec)\n", time_sec, time_ns, time_sec, time_ns);
     return 0;
 }

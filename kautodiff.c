@@ -987,20 +987,20 @@ static inline float kad_sdot(int n, const float *x, const float *y) /* BLAS sdot
 }
 static inline void kad_saxpy_inlined(int n, float a, const float *x, float *y) /* BLAS saxpy using SSE */
 {
-	int i, n8 = n >> 3 << 3; /* clear bottom 3 bits - multiple of 8 */
-	__m128 va;
-	va = _mm_set1_ps(a);
-	for (i = 0; i < n8; i += 8) /* SSE SAXPY */
+	int i, n16 = n >> 4 << 4; /* clear bottom 3 bits - multiple of 8 */
+	__m256 va;
+	va = _mm256_set1_ps(a);
+	for (i = 0; i < n16; i += 16) /* SSE SAXPY */
 	{
-		__m128 vx1, vx2, vy1, vy2, vt1, vt2;
-		vx1 = _mm_loadu_ps(&x[i]);
-		vx2 = _mm_loadu_ps(&x[i + 4]);
-		vy1 = _mm_loadu_ps(&y[i]);
-		vy2 = _mm_loadu_ps(&y[i + 4]);
-		vt1 = _mm_add_ps(_mm_mul_ps(va, vx1), vy1);
-		vt2 = _mm_add_ps(_mm_mul_ps(va, vx2), vy2);
-		_mm_storeu_ps(&y[i], vt1);
-		_mm_storeu_ps(&y[i + 4], vt2);
+		__m256 vx1, vx2, vy1, vy2, vt1, vt2;
+		vx1 = _mm256_loadu_ps(&x[i]);
+		vx2 = _mm256_loadu_ps(&x[i + 8]);
+		vy1 = _mm256_loadu_ps(&y[i]);
+		vy2 = _mm256_loadu_ps(&y[i + 8]);
+		vt1 = _mm256_add_ps(_mm256_mul_ps(va, vx1), vy1);
+		vt2 = _mm256_add_ps(_mm256_mul_ps(va, vx2), vy2);
+		_mm256_storeu_ps(&y[i], vt1);
+		_mm256_storeu_ps(&y[i + 4], vt2);
 	}
 	for (; i < n; ++i) /* deal with remainder */
 		y[i] += a * x[i];
