@@ -2,33 +2,31 @@
 #include <stdlib.h>
 #include <unistd.h>
 #include <time.h>
+#include <omp.h>
 
 #include "kann.h"
 #include "kann_extra/kann_data.h"
 
 /* -------------- Timing methods ------------- */
-double ts_ms(struct timespec ts) {
-    return ((((double)(ts.tv_sec)) * 1.0e9) + ((double)(ts.tv_nsec))) / (1.0e6);
-}
-
-struct timespec interval(struct timespec start, struct timespec stop) {
-    struct timespec temp;
-    if ((stop.tv_nsec - start.tv_nsec) < 0) {
-        temp.tv_sec = stop.tv_sec - start.tv_sec - 1;
-        temp.tv_nsec = 1000000000 + stop.tv_nsec - start.tv_nsec;
-    } else {
-        temp.tv_sec = stop.tv_sec - start.tv_sec;
-        temp.tv_nsec = stop.tv_nsec - start.tv_nsec;
-    }
-    return temp;
+double interval(struct timespec start, struct timespec end)
+{
+  struct timespec temp;
+  temp.tv_sec = end.tv_sec - start.tv_sec;
+  temp.tv_nsec = end.tv_nsec - start.tv_nsec;
+  if (temp.tv_nsec < 0)
+  {
+    temp.tv_sec = temp.tv_sec - 1;
+    temp.tv_nsec = temp.tv_nsec + 1000000000;
+  }
+  return (((double)temp.tv_sec) + ((double)temp.tv_nsec) * 1.0e-9);
 }
 
 
 int main(int argc, char *argv[]) {
     /* Timing */
-    struct timespec timer_start, timer_stop;
-    float runtime;
-    clock_gettime(CLOCK_REALTIME, &timer_start);
+    struct timespec time_start, time_stop;
+    clock_gettime(CLOCK_PROCESS_CPUTIME_ID, &time_start);
+    double measurement;
 
     kann_t *ann;
     kann_data_t *x, *y;
@@ -117,9 +115,9 @@ int main(int argc, char *argv[]) {
     kann_data_free(x);
     kann_delete(ann);
 
-    clock_gettime(CLOCK_REALTIME, &timer_stop);
-    runtime = ts_ms(interval(timer_start, timer_stop));
-    printf("\nRuntime: %f (msec)\n", runtime);
+    clock_gettime(CLOCK_PROCESS_CPUTIME_ID, &time_stop);
+    measurement = interval(time_start, time_stop);
+    printf("\nRuntime: %f (msec)\n", measurement);
 
     return 0;
 }

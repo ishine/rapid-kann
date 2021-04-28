@@ -4,6 +4,8 @@
 #include <stdlib.h>
 #include <assert.h>
 #include <stdarg.h>
+#include <time.h>
+#include <omp.h>
 #include "kann.h"
 
 int kann_verbose = 3;
@@ -880,6 +882,7 @@ int kann_train_fnn1(kann_t *ann, float lr, int mini_size, int max_epoch, int max
 		kann_switch(ann, 1);
 		while (n_proc < n_train) {
 			int b, c, ms = n_train - n_proc < mini_size? n_train - n_proc : mini_size;
+			#pragma omp parallel for shared(x, y, x1, y1)
 			for (b = 0; b < ms; ++b) {
 				memcpy(&x1[b*n_in],  x[shuf[n_proc+b]], n_in  * sizeof(float));
 				memcpy(&y1[b*n_out], y[shuf[n_proc+b]], n_out * sizeof(float));
@@ -896,6 +899,7 @@ int kann_train_fnn1(kann_t *ann, float lr, int mini_size, int max_epoch, int max
 		n_proc = 0;
 		while (n_proc < n_val) {
 			int b, c, ms = n_val - n_proc < mini_size? n_val - n_proc : mini_size;
+			#pragma omp parallel for shared(x, y, x1, y1)
 			for (b = 0; b < ms; ++b) {
 				memcpy(&x1[b*n_in],  x[n_train+n_proc+b], n_in  * sizeof(float));
 				memcpy(&y1[b*n_out], y[n_train+n_proc+b], n_out * sizeof(float));
@@ -953,6 +957,7 @@ float kann_cost_fnn1(kann_t *ann, int n, float **x, float **y)
 	kann_switch(ann, 0);
 	while (n_proc < n) {
 		int b, ms = n - n_proc < mini_size? n - n_proc : mini_size;
+		//#pragma omp parallel for
 		for (b = 0; b < ms; ++b) {
 			memcpy(&x1[b*n_in],  x[n_proc+b], n_in  * sizeof(float));
 			memcpy(&y1[b*n_out], y[n_proc+b], n_out * sizeof(float));

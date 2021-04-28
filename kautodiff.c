@@ -4,6 +4,8 @@
 #include <string.h>
 #include <float.h>
 #include <math.h>
+#include <time.h>
+#include <omp.h>
 #include "kautodiff.h"
 
 typedef struct
@@ -1002,8 +1004,9 @@ static inline void kad_saxpy_inlined(int n, float a, const float *x, float *y) /
 		_mm_storeu_ps(&y[i], vt1);
 		_mm_storeu_ps(&y[i + 4], vt2);
 	}
-	for (; i < n; ++i)
-		y[i] += a * x[i];
+	int j;
+	for (j = i; j < n; ++j)
+		y[j] += a * x[j];
 }
 #else
 static inline float kad_sdot(int n, const float *x, const float *y) /* BLAS sdot */
@@ -1041,31 +1044,35 @@ void kad_sgemm_simple(int trans_A, int trans_B, int M, int N, int K, const float
 void kad_sgemm_simple(int trans_A, int trans_B, int M, int N, int K, const float *A, const float *B, float *C) /* simplified BLAS sgemm */
 {
 	static const int x = 16;
-	int i, j, k;
+	int i, j, k, ii, jj;
+	float *cii;
 	if (!trans_A && trans_B)
 	{
+		//#pragma omp parallel for private(i, j, ii, jj) shared(cii)
 		for (i = 0; i < M; i += x)
 			for (j = 0; j < N; j += x)
 			{
-				int ii, ie = M < i + x ? M : i + x;
-				int jj, je = N < j + x ? N : j + x;
+				int ie = M < i + x ? M : i + x;
+				int je = N < j + x ? N : j + x;
 				for (ii = i; ii < ie; ++ii)
 				{ /* loop tiling */
 					const float *aii = A + ii * K, *bjj;
-					float *cii = C + ii * N;
+					cii = C + ii * N;
 					for (jj = j, bjj = B + j * K; jj < je; ++jj, bjj += K)
 						cii[jj] += kad_sdot(K, aii, bjj);
 				}
 			}
 	}
 	else if (!trans_A && !trans_B)
-	{
+	{	
+		//]#pragma omp parallel for
 		for (i = 0; i < M; ++i)
 			for (k = 0; k < K; ++k)
 				kad_saxpy_inlined(N, A[i * K + k], &B[k * N], &C[i * N]);
 	}
 	else if (trans_A && !trans_B)
 	{
+		//#pragma omp parallel for
 		for (k = 0; k < K; ++k)
 			for (i = 0; i < M; ++i)
 				kad_saxpy_inlined(N, A[k * M + i], &B[k * N], &C[i * N]);
@@ -2287,12 +2294,13 @@ static void conv_rot180(int d0, int d1, float *x) /* rotate/reverse a weight mar
 
 static void conv2d_move_1to3(int d[4], const float *x, float *y) /* convert the NCHW shape to the NHWC shape */
 {
-	int i, j, k, l;
+	int i, j, k, l, ik, ijk;
+	//#pragma omp parallel for shared(d, y) private(i, j, k, l, ik, ijk)
 	for (i = 0; i < d[0]; ++i)
 		for (j = 0; j < d[1]; ++j)
 			for (k = 0; k < d[2]; ++k)
 			{
-				int ik = (i * d[2] + k) * d[3], ijk = ((i * d[1] + j) * d[2] + k) * d[3];
+				ik = (i * d[2] + k) * d[3], ijk = ((i * d[1] + j) * d[2] + k) * d[3];
 				for (l = 0; l < d[3]; ++l)
 					y[(ik + l) * d[1] + j] = x[ijk + l];
 			}
@@ -2300,12 +2308,13 @@ static void conv2d_move_1to3(int d[4], const float *x, float *y) /* convert the 
 
 static void conv2d_add_3to1(int d[4], const float *y, float *x) /* convert the NHWC shape back to NCHW and add to another NCHW-shaped array */
 {
-	int i, j, k, l;
+	int i, j, k, l, ik, ijk;
+	//#pragma omp parallel for shared(d, x) private(i, j, k, l, ik, ijk)
 	for (i = 0; i < d[0]; ++i)
 		for (j = 0; j < d[1]; ++j)
 			for (k = 0; k < d[2]; ++k)
 			{
-				int ik = (i * d[2] + k) * d[3], ijk = ((i * d[1] + j) * d[2] + k) * d[3];
+				ik = (i * d[2] + k) * d[3], ijk = ((i * d[1] + j) * d[2] + k) * d[3];
 				for (l = 0; l < d[3]; ++l)
 					x[ijk + l] += y[(ik + l) * d[1] + j];
 			}
@@ -2378,10 +2387,12 @@ static void conv2d_add_3to1(int d[4], const float *y, float *x) /* convert the N
  */
 int kad_op_conv2d(kad_node_t *p, int action) /* in the number-channel-height-width (NCHW) shape */
 {
+#define OMP_PARA_FOR _Pragma("omp parallel for shared(w, p, q, aux) private(n, c1, c0, i, k, ii)")
 #define conv2d_loop1(_x, _w, _y, _tmp, _row_func)                                                                             \
 	do                                                                                                                        \
 	{ /* for the NCHW shape */                                                                                                \
-		int n, c1, c0, i, k, ii;                                                                                              \
+		int n, c1, c0, i, k, ii;  \
+		OMP_PARA_FOR \
 		for (n = 0; n < q->d[0]; ++n)			 /* mini-batch */                                                             \
 			for (c1 = 0; c1 < w->d[0]; ++c1)	 /* output channel */                                                         \
 				for (c0 = 0; c0 < w->d[1]; ++c0) /* input channel */                                                          \
@@ -2402,10 +2413,12 @@ int kad_op_conv2d(kad_node_t *p, int action) /* in the number-channel-height-wid
 					}	  /* ~k, c0, c1, n */                                                                                 \
 	} while (0)
 
+#define OMP_PARA_FOR2 _Pragma("omp parallel for shared(w, p, q, aux, j_skip) private(n, c1, i, j, k, ii)")
 #define conv2d_loop2(_x, _w, _y, _code)                                                                                   \
 	do                                                                                                                    \
 	{ /* for the NHWC shape */                                                                                            \
-		int n, c1, i, j, k, ii, j_skip = aux[1].stride * q->d[1], m = w->d[3] * w->d[1];                                  \
+		int n, c1, i, j, k, ii, j_skip = aux[1].stride * q->d[1], m = w->d[3] * w->d[1]; \
+		OMP_PARA_FOR2 \
 		for (n = 0; n < q->d[0]; ++n)		 /* mini-batch */                                                             \
 			for (c1 = 0; c1 < w->d[0]; ++c1) /* output channel */                                                         \
 				for (k = 0; k < w->d[2]; ++k)                                                                             \
