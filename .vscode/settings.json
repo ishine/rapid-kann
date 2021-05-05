@@ -3,6 +3,8 @@
         "*.cu": "cpp",
         "*.cuh": "cpp",
         "random": "cpp",
-        "*.tcc": "cpp"
+        "*.tcc": "cpp",
+        "*.ipp": "cpp",
+        "cmath": "cpp"
     }
 }

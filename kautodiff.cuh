@@ -34,7 +34,7 @@
 #include <stdint.h>
 
 /* parameters for CUDA */
-#define block_size 16
+#define BLOCK_SIZE 11 /* TODO: parametrize this for graph plotting */
 
 #ifdef __STRICT_ANSI__
 #define inline

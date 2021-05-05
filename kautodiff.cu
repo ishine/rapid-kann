@@ -932,7 +932,42 @@ void kad_saxpy(int n, float a, const float *x, float *y) { kad_saxpy_inlined(n, 
 
 #ifdef __CUDACC__
 
-__global__ void cuda_sgemm_naive(const float *A, const int lda, const float *B, const int ldb, float *C, const int ldc, const float alpha, const float beta, const int M, const int N, const int K) {
+/* transpose kernel to use prior to SGEMM 
+optimized to ensure that all global R/W are coalesced and avoid bank conflicts in shared memory
+pads each row of the block in shared memory so no bank conflicts on same column accesses */
+__global__ void transpose_coalesce(float *Xt, const float *X, const int width, const int height)
+{
+  __shared__ float block[BLOCK_SIZE][BLOCK_SIZE];
+	
+  /* read matrix tile into shared memory */
+  unsigned int row = blockIdx.x * BLOCK_SIZE + threadIdx.x;
+  unsigned int col = blockIdx.y * BLOCK_SIZE + threadIdx.y;
+  if((row < width) && (col < height))
+      block[threadIdx.y][threadIdx.x] = X[col * width + row];
+    
+  __syncthreads();
+
+  /* write transposed matrix tile to global memory */
+  row = blockIdx.y * BLOCK_SIZE + threadIdx.x;
+  col = blockIdx.x * BLOCK_SIZE + threadIdx.y;
+  if((row < height) && (col < width))
+      Xt[col * height + row] = block[threadIdx.x][threadIdx.y];
+
+}
+
+__global__ void transpose_naive(float *Xt, const float* X, const int width, const int height)
+{
+   unsigned int row = blockDim.x * blockIdx.x + threadIdx.x;
+   unsigned int col = blockDim.y * blockIdx.y + threadIdx.y;
+   
+   if (row < width && col < height)
+   {
+       Xt[col + height * row] = X[row + width * col]; 
+   }
+}
+
+/* Naive kernel */
+__global__ void cuda_sgemm_naive(const float *A, const int lda, const float *B, const int ldb, float *C, const int ldc, const int M, const int N, const int K) {
     /* A.row x B.col */
     unsigned int row = blockDim.y * blockIdx.y + threadIdx.y;
     unsigned int col = blockDim.x * blockIdx.x + threadIdx.x;
@@ -944,27 +979,76 @@ __global__ void cuda_sgemm_naive(const float *A, const int lda, const float *B, 
         acc += A[row * lda + k] * B[k * ldb + col];
     }
 
-    C[row * ldc + col] = acc * alpha + beta * C[row * ldc + col]; /* write to device memory - one element per thread */
+    /* alpha and beta are always 1.0f */
+    C[row * ldc + col] = acc + C[row * ldc + col]; /* write to device memory - one element per thread */
+}
+
+/* Tiled kernel for SGEMM */
+__global__ void cuda_sgemm_tiling(const float *A, const int lda, const float *B, const int ldb, float *C, const int ldc, const int M, const int N, const int K) {
+    __shared__ float As[BLOCK_SIZE][BLOCK_SIZE];
+    __shared__ float Bs[BLOCK_SIZE][BLOCK_SIZE];
+
+    unsigned int A_UL_begin = blockIdx.y * BLOCK_SIZE * lda;
+    unsigned int A_UL_end = A_UL_begin + K;
+    unsigned int A_step_size = BLOCK_SIZE;
+
+    unsigned int B_UL_begin = blockIdx.x * BLOCK_SIZE;
+    unsigned int B_UL_end = B_UL_begin + K * ldb;
+    unsigned int B_step_size = BLOCK_SIZE * ldb;
+
+    unsigned int a_ul, b_ul;
+    float acc_cij = 0;
+
+    bool load_y_in_A = (blockIdx.y * BLOCK_SIZE + threadIdx.y) < M;
+    bool load_x_in_B = (blockIdx.x * BLOCK_SIZE + threadIdx.x) < N;
+
+    for (a_ul = A_UL_begin, b_ul = B_UL_begin;
+         a_ul < A_UL_end;
+         a_ul += A_step_size, b_ul += B_step_size) {
+        /* Load the sub-block of A and B to shared memory */
+        if (a_ul + threadIdx.x < A_UL_end && load_y_in_A) {
+            As[threadIdx.y][threadIdx.x] = A[a_ul + lda * threadIdx.y + threadIdx.x];
+        } else {
+            As[threadIdx.y][threadIdx.x] = 0;
+        }
+        if (load_x_in_B && b_ul + threadIdx.y * ldb < B_UL_end) {
+            Bs[threadIdx.x][threadIdx.y] = B[b_ul + ldb * threadIdx.y + threadIdx.x];  // shared memory bank conflict
+        } else {
+            Bs[threadIdx.x][threadIdx.y] = 0;
+        }
+        __syncthreads();
+
+        // Compute
+        for (unsigned int k = 0; k < BLOCK_SIZE; k++)
+            acc_cij += As[threadIdx.y][k] * Bs[threadIdx.x][k];  // shared memory bank conflict
+        __syncthreads();
+    }
+
+    // Accumulate row i of A and column j of B and write to the output array
+    unsigned int row = BLOCK_SIZE * blockIdx.y + threadIdx.y;
+    unsigned int col = BLOCK_SIZE * blockIdx.x + threadIdx.x;
+    if (row < M && col < N)
+        C[row * ldc + col] = acc_cij + C[row * ldc + col];
 }
 
 /* Coalesce kernel for SGEMM */
-__global__ void cuda_sgemm_coalesce(const float *A, const int lda, const float *B, const int ldb, float *C, const int ldc, const float alpha, const float beta, const int M, const int N, const int K) {
-    __shared__ float As[block_size][block_size];
-    __shared__ float Bs[block_size][block_size];
+__global__ void cuda_sgemm_coalesce(const float *A, const int lda, const float *B, const int ldb, float *C, const int ldc, const int M, const int N, const int K) {
+    __shared__ float As[BLOCK_SIZE][BLOCK_SIZE];
+    __shared__ float Bs[BLOCK_SIZE][BLOCK_SIZE];
 
-    int A_UL_begin = blockIdx.y * block_size * lda; /* upper left based on grid posisiton */
+    int A_UL_begin = blockIdx.y * BLOCK_SIZE * lda; /* upper left based on grid posisiton */
     int A_UL_end = A_UL_begin + K;
-    int A_step = block_size;
+    int A_step = BLOCK_SIZE;
 
-    int B_UL_begin = blockIdx.x * block_size;
+    int B_UL_begin = blockIdx.x * BLOCK_SIZE;
     int B_UL_end = B_UL_begin + K * ldb;
-    int B_step = block_size * ldb;
+    int B_step = BLOCK_SIZE * ldb;
 
     int a_ul, b_ul;    /* iterators for a,b */
     float acc_cij = 0; /* accumulator for C[i][j] */
 
-    bool load_y_in_A = (blockIdx.y * block_size + threadIdx.y) < M;
-    bool load_x_in_B = (blockIdx.x * block_size + threadIdx.x) < N;
+    bool load_y_in_A = (blockIdx.y * BLOCK_SIZE + threadIdx.y) < M;
+    bool load_x_in_B = (blockIdx.x * BLOCK_SIZE + threadIdx.x) < N;
 
     for (a_ul = A_UL_begin, b_ul = B_UL_begin;
          a_ul < A_UL_end;
@@ -983,17 +1067,17 @@ __global__ void cuda_sgemm_coalesce(const float *A, const int lda, const float *
         __syncthreads();
 
 #pragma unroll
-        for (unsigned int k = 0; k < block_size; k++)
+        for (unsigned int k = 0; k < BLOCK_SIZE; k++)
             acc_cij += As[threadIdx.y][k] * Bs[k][threadIdx.x];
         __syncthreads();
     }
 
     /* accumulate A[i][:] and B[:][j] */
-    unsigned int row = block_size * blockIdx.y + threadIdx.y;
-    unsigned int col = block_size * blockIdx.x + threadIdx.x;
+    unsigned int row = BLOCK_SIZE * blockIdx.y + threadIdx.y;
+    unsigned int col = BLOCK_SIZE * blockIdx.x + threadIdx.x;
 
     if (row < M && col < N) /* write back output */
-        C[row * ldc + col] = alpha * acc_cij + beta * C[row * ldc + col];
+        C[row * ldc + col] = acc_cij + C[row * ldc + col];
 }
 
 /* Wrapper function for CUDA kernels - called in place of kad_sgemm_simple (CBLAS/SSE) */
@@ -1003,47 +1087,81 @@ void kad_sgemm_simple_cuda(int trans_A, int trans_B, int M, int N, int K, const 
     int C_shape = sizeof(float) * M * N;
 
     float *d_A, *d_B, *d_C; /* device matrices - host passed in - A/B/C */
+
     cudaMalloc((void **)&d_A, A_shape);
     cudaMalloc((void **)&d_B, B_shape);
     cudaMalloc((void **)&d_C, C_shape);
     cudaMemcpy(d_A, A, A_shape, cudaMemcpyHostToDevice);
-    cudaMemcpy(d_B, B, B_shape, cudaMemcpyHostToDevice);
+    cudaMemcpy(d_B, B, B_shape, cudaMemcpyHostToDevice); /* this makes no sense - if it copies this to device memory the above transpose does nothing - yet has poor results */
     cudaMemcpy(d_C, C, C_shape, cudaMemcpyHostToDevice);
 
+    if(trans_A){ /* TODO: this DOES NOT give the expected results */
+        float* d_AT; /* not inplace transpose - need external data structure */
+        cudaMalloc((void **)&d_AT, A_shape);
+        dim3 transBlockDim(BLOCK_SIZE, BLOCK_SIZE);
+        dim3 transGridDim(1 + ((M - 1) / BLOCK_SIZE), 1 + ((K - 1) / BLOCK_SIZE));
+        /* TRANSPOSE OPTIONS */
+        // transpose_naive<<<transGridDim, transBlockDim>>>(d_AT, d_A, M, K);
+        transpose_coalesce<<<transGridDim, transBlockDim>>>(d_AT, d_A, M, K);
+        cudaFree(d_A);
+        d_A = d_AT;
+    }
+
+    if(trans_B){ /* TODO: this DOES NOT give the expected results */
+        float* d_BT; /* not inplace transpose - need external data structure */
+        cudaMalloc((void **)&d_BT, B_shape);
+        dim3 transBlockDim(BLOCK_SIZE, BLOCK_SIZE);
+        dim3 transGridDim(1 + ((K - 1) / BLOCK_SIZE), 1 + ((N - 1) / BLOCK_SIZE));
+        /* TRANSPOSE OPTIONS */
+        // transpose_naive<<<transGridDim, transBlockDim>>>(d_BT, d_B, M, K);
+        transpose_coalesce<<<transGridDim, transBlockDim>>>(d_BT, d_B, K, N);
+        cudaFree(d_B);
+        d_B = d_BT;
+    }
+
     /* SGEMM parameters */
-    int lda = trans_A ? M : K, ldb = trans_B ? K : N, ldc = N;
-    float alpha = 1.0f, beta = 1.0f;
+    // int lda = trans_A ? M : K, ldb = trans_B ? K : N, ldc = N;
+    int lda = K, ldb = N, ldc = N; /* only for non-transposed operations - if tranpose above works - no problem */
+    // float alpha = 1.0f, beta = 1.0f; /* never change - just make a constant / remove */
 
-    dim3 blockDim(block_size, block_size, 1);
-    dim3 gridDim(1 + ((N - 1) / block_size), 1 + ((M - 1) / block_size), 1); /* these might need to swap */
+    dim3 blockDim(BLOCK_SIZE, BLOCK_SIZE, 1);
+    dim3 gridDim(1 + ((N - 1) / BLOCK_SIZE), 1 + ((M - 1) / BLOCK_SIZE), 1); /* these might need to swap */
 
-    /* kernel call */
-    cuda_sgemm_naive<<<gridDim, blockDim>>>(d_A, lda, d_B, ldb, d_C, ldc, alpha, beta, M, N, K);
-    cuda_sgemm_coalesce<<<gridDim, blockDim>>>(d_A, lda, d_B, ldb, d_C, ldc, alpha, beta, M, N, K);
+    /* Naive MMM kernel */
+    // cuda_sgemm_naive<<<gridDim, blockDim>>>(d_A, lda, d_B, ldb, d_C, ldc, M, N, K);
+    
+    /* Tiled MMM kernel */
+    cuda_sgemm_tiling<<<gridDim, blockDim>>>(d_A, lda, d_B, ldb, d_C, ldc, M, N, K);
+
+    /* Coalesced memory kernel */
+    // cuda_sgemm_coalesce<<<gridDim, blockDim>>>(d_A, lda, d_B, ldb, d_C, ldc, M, N, K);
 
     /* copy back to host */
     cudaMemcpy(C, d_C, C_shape, cudaMemcpyDeviceToHost);
+    cudaFree(d_A);
+    cudaFree(d_B);
+    cudaFree(d_C);
 }
 
-// #elif HAVE_CBLAS
-// #include <cblas.h> /* FORTRAN optimization of MMM */
-// void kad_sgemm_simple(int trans_A, int trans_B, int M, int N, int K, const float *A, const float *B, float *C)
-// { /* general purpose MM - can handle: 	C ← αAB+βC | C ← αABT+βC | C ← αATB+βC | C ← αATBT+βC */
-//  	cblas_sgemm( CblasRowMajor, 						/* cblas order - row major (FORTRAN is col major) */
-// 				 trans_A ? CblasTrans : CblasNoTrans, 	/* A is transposed (KM)*/
-// 				 trans_B ? CblasTrans : CblasNoTrans, 	/* B is transposed (NK)*/
-// 				 M, 									/* l - rows in matrix C */
-// 				 N, 									/* n - cols in matrix C */
-// 				 K, 									/* m - If transa = 'N', it is the number of columns in matrix A. If transa = 'T' or 'C', it is the number of rows in matrix A. In addition: If transb = 'N', it is the number of rows in matrix B. If transb = 'T' or 'C', it is the number of columns in matrix B. */
-// 				 1.0f, 									/* alpha - scalar weight for A */
-// 				 A, 									/* A */
-// 				 trans_A ? M : K, 						/* lda - leading dimension for A */
-// 				 B, 									/* B */
-// 				 trans_B ? K : N,						/* ldb - leading dimension for B */
-// 				 1.0f, 									/* beta - scalar weight for C */
-// 				 C, 									/* C */
-// 				 N); 									/* ldc - leading dimension for C */
-// }
+/* #elif HAVE_CBLAS
+#include <cblas.h> // FORTRAN optimization of MMM
+void kad_sgemm_simple(int trans_A, int trans_B, int M, int N, int K, const float *A, const float *B, float *C)
+{ general purpose MM 	C ← αAB+βC | C ← αABT+βC | C ← αATB+βC | C ← αATBT+βC 
+ 	cblas_sgemm( CblasRowMajor, 					 cblas order - row major (FORTRAN is col major)
+				 trans_A ? CblasTrans : CblasNoTrans,  A is transposed (KM)
+				 trans_B ? CblasTrans : CblasNoTrans,  B is transposed (NK)
+				 M, 								 l - rows in matrix C 
+				 N, 								 n - cols in matrix C 
+				 K, 								 m - If transa = 'N', it is the number of columns in matrix A. If transa = 'T' or 'C', it is the number of rows in matrix A. In addition: If transb = 'N', it is the number of rows in matrix B. If transb = 'T' or 'C', it is the number of columns in matrix B. 
+				 1.0f, 								 alpha - scalar weight for A 
+				 A, 								 A 
+				 trans_A ? M : K, 					 lda - leading dimension for A 
+				 B, 								 B 
+				 trans_B ? K : N,					 ldb - leading dimension for B 
+				 1.0f, 								 beta - scalar weight for C 
+				 C, 								 C 
+				 N); 								 ldc - leading dimension for C 
+} */
 
 // #else /* CUDA not available so use this */
 void kad_sgemm_simple(int trans_A, int trans_B, int M, int N, int K, const float *A, const float *B, float *C) /* simplified BLAS sgemm */
@@ -1270,13 +1388,19 @@ int kad_op_cmul(kad_node_t *p, int action) {
     } else if (action == KAD_FORWARD) {
         memset(p->x, 0, n_a_row * n_b_row * sizeof(float));
         if (q[0]->x && q[1]->x)                                                      /* reset output 'value' */
-            kad_sgemm_simple(0, 1, n_a_row, n_b_row, n_col, q[0]->x, q[1]->x, p->x); /* Y = X * trans(W) */
+            kad_sgemm_simple_cuda(0, 1, n_a_row, n_b_row, n_col, q[0]->x, q[1]->x, p->x); /* Y = X * trans(W) */
+            // kad_sgemm_simple(0, 1, n_a_row, n_b_row, n_col, q[0]->x, q[1]->x, p->x); /* Y = X * trans(W) */
     } else if (action == KAD_BACKWARD) {
-        if (kad_is_back(q[0]) && q[1]->x)                                                 /* this is being hit - good */
-            // kad_sgemm_simple_cuda(0, 0, n_a_row, n_col, n_b_row, p->g, q[1]->x, q[0]->g); /* G_x <- G_y * W */
-            kad_sgemm_simple(0, 0, n_a_row, n_col, n_b_row, p->g, q[1]->x, q[0]->g); /* G_x <- G_y * W */
-        if (kad_is_back(q[1]) && q[0]->x)
-            kad_sgemm_simple(1, 0, n_b_row, n_col, n_a_row, p->g, q[0]->x, q[1]->g); /* G_w <- trans(G_y) * X */
+        if (kad_is_back(q[0]) && q[1]->x){
+            /* CUDA kernel used for non-transposed matrices */
+            kad_sgemm_simple_cuda(0, 0, n_a_row, n_col, n_b_row, p->g, q[1]->x, q[0]->g); /* G_x <- G_y * W */
+            // kad_sgemm_simple(0, 0, n_a_row, n_col, n_b_row, p->g, q[1]->x, q[0]->g); /* G_x <- G_y * W */
+            /* 16-128-10 M-K-N */
+        }
+        if (kad_is_back(q[1]) && q[0]->x){/* G_w <- trans(G_y) * X */
+            kad_sgemm_simple_cuda(1, 0, n_b_row, n_col, n_a_row, p->g, q[0]->x, q[1]->g); /* 10-128-16 M-K-N*/
+            // kad_sgemm_simple(1, 0, n_b_row, n_col, n_a_row, p->g, q[0]->x, q[1]->g);
+        } 
     }
     return 0;
 }
@@ -1299,12 +1423,15 @@ int kad_op_matmul(kad_node_t *p, int action) /* TODO: matmul and cmul have diffe
     } else if (action == KAD_FORWARD) {
         memset(p->x, 0, n_a_row * n_b_col * sizeof(float));
         if (q[0]->x && q[1]->x)
-            kad_sgemm_simple(0, 0, n_a_row, n_b_col, n_a_col, q[0]->x, q[1]->x, p->x); /* Y = X * W */
+            // kad_sgemm_simple(0, 0, n_a_row, n_b_col, n_a_col, q[0]->x, q[1]->x, p->x); /* Y = X * W */
+            kad_sgemm_simple_cuda(0, 0, n_a_row, n_b_col, n_a_col, q[0]->x, q[1]->x, p->x); /* Y = X * W */
     } else if (action == KAD_BACKWARD) {
         if (kad_is_back(q[0]) && q[1]->x)
-            kad_sgemm_simple(0, 1, n_a_row, n_a_col, n_b_col, p->g, q[1]->x, q[0]->g); /* G_x <- G_y * trans(W) */
+            // kad_sgemm_simple(0, 1, n_a_row, n_a_col, n_b_col, p->g, q[1]->x, q[0]->g); /* G_x <- G_y * trans(W) */
+            kad_sgemm_simple_cuda(0, 1, n_a_row, n_a_col, n_b_col, p->g, q[1]->x, q[0]->g); /* G_x <- G_y * trans(W) */
         if (kad_is_back(q[1]) && q[0]->x)
-            kad_sgemm_simple(1, 0, n_b_row, n_b_col, n_a_row, q[0]->x, p->g, q[1]->g); /* G_y <- trans(A) * G_y */
+            // kad_sgemm_simple(1, 0, n_b_row, n_b_col, n_a_row, q[0]->x, p->g, q[1]->g); /* G_y <- trans(A) * G_y */
+            kad_sgemm_simple_cuda(1, 0, n_b_row, n_b_col, n_a_row, q[0]->x, p->g, q[1]->g); /* G_y <- trans(A) * G_y */
     }
     return 0;
 }
@@ -2218,7 +2345,7 @@ int kad_op_conv2d(kad_node_t *p, int action) /* in the number-channel-height-wid
             conv_rot180(w->d[0] * w->d[1], w->d[2] * w->d[3], w->x);
             if (!algo_switch) {
                 conv2d_loop1(q->g, w->x, p->g, t, process_row_back_x);
-            } else {
+            } else { /* ONLY CALLS THIS ONE */
                 memset(q1, 0, kad_len(q) * sizeof(float));
                 conv2d_move_1to3(w->d, w->x, w1);
                 conv2d_loop2(q1, w1, p->g, kad_saxpy(m, *_yy, _ww, _xx));
@@ -2228,6 +2355,7 @@ int kad_op_conv2d(kad_node_t *p, int action) /* in the number-channel-height-wid
         }
         if (kad_is_back(p->child[1])) { /* backprop to the weight matrix */
             conv_rot180(w->d[0] * w->d[1], w->d[2] * w->d[3], w->g);
+            /* USES BOTH */
             if (!algo_switch) {
                 conv2d_loop1(q->x, w->g, p->g, t, process_row_back_w);
             } else {

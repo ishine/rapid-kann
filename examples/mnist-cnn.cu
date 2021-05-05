@@ -81,7 +81,7 @@ int main(int argc, char *argv[]) {
     printf("Built MNIST-CNN with training parameters:\n------------------------------------\n");
     printf("Max epochs\t\t%d\n", max_epoch);
     printf("Threads\t\t\t%d\n", n_threads);
-    printf("CUDA Blocksize\t\t%d\n", block_size);
+    printf("CUDA Blocksize\t\t%d\n", BLOCK_SIZE);
     printf("------------------------------------\n");
 
     clock_gettime(CLOCK_PROCESS_CPUTIME_ID, &time_start);
