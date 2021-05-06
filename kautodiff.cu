@@ -935,7 +935,7 @@ void kad_saxpy(int n, float a, const float *x, float *y) { kad_saxpy_inlined(n, 
 /* transpose kernel to use prior to SGEMM 
 optimized to ensure that all global R/W are coalesced and avoid bank conflicts in shared memory
 pads each row of the block in shared memory so no bank conflicts on same column accesses */
-__global__ void transpose_coalesce(float *Xt, const float *X, const int width, const int height)
+__global__ void transpose_coalesce(float *MT, const float *M, const int width, const int height)
 {
   __shared__ float block[BLOCK_SIZE][BLOCK_SIZE];
 	
@@ -943,7 +943,7 @@ __global__ void transpose_coalesce(float *Xt, const float *X, const int width, c
   unsigned int row = blockIdx.x * BLOCK_SIZE + threadIdx.x;
   unsigned int col = blockIdx.y * BLOCK_SIZE + threadIdx.y;
   if((row < width) && (col < height))
-      block[threadIdx.y][threadIdx.x] = X[col * width + row];
+      block[threadIdx.y][threadIdx.x] = M[col * width + row];
     
   __syncthreads();
 
@@ -951,18 +951,18 @@ __global__ void transpose_coalesce(float *Xt, const float *X, const int width, c
   row = blockIdx.y * BLOCK_SIZE + threadIdx.x;
   col = blockIdx.x * BLOCK_SIZE + threadIdx.y;
   if((row < height) && (col < width))
-      Xt[col * height + row] = block[threadIdx.x][threadIdx.y];
+      MT[col * height + row] = block[threadIdx.x][threadIdx.y];
 
 }
 
-__global__ void transpose_naive(float *Xt, const float* X, const int width, const int height)
+__global__ void transpose_naive(float *MT, const float* M, const int width, const int height)
 {
    unsigned int row = blockDim.x * blockIdx.x + threadIdx.x;
    unsigned int col = blockDim.y * blockIdx.y + threadIdx.y;
    
    if (row < width && col < height)
    {
-       Xt[col + height * row] = X[row + width * col]; 
+       MT[col + height * row] = M[row + width * col]; 
    }
 }
 
@@ -1080,6 +1080,110 @@ __global__ void cuda_sgemm_coalesce(const float *A, const int lda, const float *
         C[row * ldc + col] = acc_cij + C[row * ldc + col];
 }
 
+/* Parameters for cuda_sgemm_float4 */
+#define TILE_M   16 // Tile size in dimension M for loading into shared memory
+#define TILE_N   16  // Tile size in dimension N for loading into shared memory
+#define TILE_K   16   // Tile size in dimension K for loading into shared memory
+#define RED_TILE_M 4   // Reduced tile size on dimension M (how many thread on dimension M)
+#define RED_TILE_N 4   // Reduced tile size on dimension N (how many thread on dimension N)
+#define WORK_PER_THREAD_M 4    // Each thread is responsible for how many elements on dimension M, == TILE_M / RED_TILE_M
+#define WORK_PER_THREAD_N 4    // Each thread is responsible for how many elements on dimension N, == TILE_N / RED_TILE_N
+#define THREADS_PER_A_ROW  1    // How many thread can read a row of tile A, == TILE_K / (VPTAK * 4)
+#define THREADS_PER_B_ROW  1    // How many thread can read a row of tile B, == TILE_N / (VPTBN * 4)
+
+/* 
+CUDA kernel using intrinsic float4 types to load into global memory
+Based on article at https://cnugteren.github.io/tutorial/pages/page6.html */
+
+__global__ void cuda_sgemm_float4(const float4 *A, const int lda, const float4 *B, const int ldb, float *C, const int ldc, const int M, const int N, const int K)
+{ 
+    // Thread identifiers
+	const unsigned int col = threadIdx.x; // Local col ID: 0, ..., RED_TILE_N-1
+	const unsigned int row = threadIdx.y; // Local row ID: 0, ..., RED_TILE_M-1
+	const unsigned int globalRow = TILE_M * blockIdx.y + row; // Row ID of C (0..c_height)
+	const unsigned int globalCol = TILE_N * blockIdx.x + col; // Col ID of C (0..c_width)
+	const unsigned int block_id  = row * blockDim.x + col;
+
+	// Local memory to fit a tile of TS*TS elements of A and B
+	__shared__ float As[TILE_M][TILE_K];
+	__shared__ float Bs[TILE_K][TILE_N];
+
+	// Initialise accumulation registers
+	float C_acc[WORK_PER_THREAD_M][WORK_PER_THREAD_N];
+	float B_acc[WORK_PER_THREAD_N];
+
+	#pragma unroll
+	for (unsigned int wm = 0; wm < WORK_PER_THREAD_M; wm++)
+		#pragma unroll	
+		for (unsigned int wn = 0; wn < WORK_PER_THREAD_N; wn++) 
+			C_acc[wm][wn] = 0;
+	
+	// Loop over all tiles
+	const unsigned int numTiles = K / TILE_K;
+	for (unsigned int t = 0; t < numTiles; t++) 
+	{
+		/* Load tiles from A and B into shared memory */
+		unsigned int Arow = block_id / THREADS_PER_A_ROW;
+		unsigned int Acol = (block_id % THREADS_PER_A_ROW) * 16;
+		unsigned int Brow = block_id / THREADS_PER_B_ROW;
+		unsigned int Bcol = (block_id % THREADS_PER_B_ROW) * 16;
+		unsigned int indexA = ((TILE_M * blockIdx.y + Arow) * lda + t * TILE_K + Acol) / 4;
+		unsigned int indexB = ((TILE_K * t + Brow) * ldb + TILE_N * blockIdx.x + Bcol) / 4;
+
+		#pragma unroll
+		for (unsigned int vec = 0; vec < 4; vec++)
+		{
+			float4 vecA = __ldg(&A[indexA + vec]);
+			float4 vecB = __ldg(&B[indexB + vec]);
+			As[Arow][Acol + vec * 4 + 0] = vecA.x;
+			As[Arow][Acol + vec * 4 + 1] = vecA.y;
+			As[Arow][Acol + vec * 4 + 2] = vecA.z;
+			As[Arow][Acol + vec * 4 + 3] = vecA.w;
+			Bs[Brow][Bcol + vec * 4 + 0] = vecB.x;
+			Bs[Brow][Bcol + vec * 4 + 1] = vecB.y;
+			Bs[Brow][Bcol + vec * 4 + 2] = vecB.z;
+			Bs[Brow][Bcol + vec * 4 + 3] = vecB.w;
+		}
+		__syncthreads();
+
+		// Perform the computation for a single tile
+		#pragma unroll
+		for (unsigned int k = 0; k < TILE_K; k++) 
+		{
+			// Cache the values of Bs in registers
+			#pragma unroll
+			for (unsigned int wn = 0; wn < WORK_PER_THREAD_N; wn++) 
+				B_acc[wn] = Bs[k][col + wn * RED_TILE_N];
+			
+			// Perform the computation
+			#pragma unroll
+			for (unsigned int wm = 0; wm < WORK_PER_THREAD_M; wm++) 
+			{
+				float Areg_wm = As[row + wm * RED_TILE_M][k];
+				#pragma unroll
+				for (unsigned int wn = 0; wn < WORK_PER_THREAD_N; wn++)
+				{
+					C_acc[wm][wn] += Areg_wm * B_acc[wn];
+				}
+			}
+		}
+		__syncthreads();
+	}
+	
+	// Store the final results in C
+	#pragma unroll
+	for (unsigned int wm = 0; wm < WORK_PER_THREAD_M; wm++)
+	{
+		unsigned int c_dim1 = (globalRow + wm * RED_TILE_M) * ldc;
+		#pragma unroll
+		for (unsigned int wn = 0; wn < WORK_PER_THREAD_N; wn++)
+		{
+			unsigned int c_coord = globalCol + wn * RED_TILE_N + c_dim1;
+			C[c_coord] = C_acc[wm][wn] + C[c_coord];
+		}
+	}
+}
+
 /* Wrapper function for CUDA kernels - called in place of kad_sgemm_simple (CBLAS/SSE) */
 void kad_sgemm_simple_cuda(int trans_A, int trans_B, int M, int N, int K, const float *A, const float *B, float *C) {
     int A_shape = sizeof(float) * M * K;
@@ -1100,9 +1204,13 @@ void kad_sgemm_simple_cuda(int trans_A, int trans_B, int M, int N, int K, const 
         cudaMalloc((void **)&d_AT, A_shape);
         dim3 transBlockDim(BLOCK_SIZE, BLOCK_SIZE);
         dim3 transGridDim(1 + ((M - 1) / BLOCK_SIZE), 1 + ((K - 1) / BLOCK_SIZE));
+
         /* TRANSPOSE OPTIONS */
+        
         // transpose_naive<<<transGridDim, transBlockDim>>>(d_AT, d_A, M, K);
+        
         transpose_coalesce<<<transGridDim, transBlockDim>>>(d_AT, d_A, M, K);
+        
         cudaFree(d_A);
         d_A = d_AT;
     }
@@ -1112,17 +1220,19 @@ void kad_sgemm_simple_cuda(int trans_A, int trans_B, int M, int N, int K, const 
         cudaMalloc((void **)&d_BT, B_shape);
         dim3 transBlockDim(BLOCK_SIZE, BLOCK_SIZE);
         dim3 transGridDim(1 + ((K - 1) / BLOCK_SIZE), 1 + ((N - 1) / BLOCK_SIZE));
+
         /* TRANSPOSE OPTIONS */
+
         // transpose_naive<<<transGridDim, transBlockDim>>>(d_BT, d_B, M, K);
+
         transpose_coalesce<<<transGridDim, transBlockDim>>>(d_BT, d_B, K, N);
+
         cudaFree(d_B);
         d_B = d_BT;
     }
 
-    /* SGEMM parameters */
-    // int lda = trans_A ? M : K, ldb = trans_B ? K : N, ldc = N;
-    int lda = K, ldb = N, ldc = N; /* only for non-transposed operations - if tranpose above works - no problem */
-    // float alpha = 1.0f, beta = 1.0f; /* never change - just make a constant / remove */
+    int lda = K, ldb = N, ldc = N;
+    
 
     dim3 blockDim(BLOCK_SIZE, BLOCK_SIZE, 1);
     dim3 gridDim(1 + ((N - 1) / BLOCK_SIZE), 1 + ((M - 1) / BLOCK_SIZE), 1); /* these might need to swap */
@@ -1131,10 +1241,18 @@ void kad_sgemm_simple_cuda(int trans_A, int trans_B, int M, int N, int K, const 
     // cuda_sgemm_naive<<<gridDim, blockDim>>>(d_A, lda, d_B, ldb, d_C, ldc, M, N, K);
     
     /* Tiled MMM kernel */
-    cuda_sgemm_tiling<<<gridDim, blockDim>>>(d_A, lda, d_B, ldb, d_C, ldc, M, N, K);
+    // cuda_sgemm_tiling<<<gridDim, blockDim>>>(d_A, lda, d_B, ldb, d_C, ldc, M, N, K);
 
     /* Coalesced memory kernel */
     // cuda_sgemm_coalesce<<<gridDim, blockDim>>>(d_A, lda, d_B, ldb, d_C, ldc, M, N, K);
+
+    /* float4 vector loading + loop unrolled kernel */
+    // (2) Perform C := alpha * C + A * B
+	// dim3 gridDimFloat4(1 + ((pad_C_width - 1) / TSN), 1 + ((pad_C_height - 1) / TSM));
+	// dim3 blockDimFloat4(RED_TILE_N, RED_TILE_M);
+	// cuda_sgemm_float4<<<gridDimFloat4, blockDimFloat4>>>((float4 *)d_A, lda, (float4 *)d_B, ldb, d_C, ldc, M, N, K);
+	cuda_sgemm_float4<<<gridDim, blockDim>>>((float4 *)d_A, lda, (float4 *)d_B, ldb, d_C, ldc, M, N, K);
+
 
     /* copy back to host */
     cudaMemcpy(C, d_C, C_shape, cudaMemcpyDeviceToHost);
